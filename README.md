@@ -30,7 +30,9 @@ python3 scripts/workspace.py link "http://THE-LINK/?token=..."
 python3 scripts/workspace.py join --name home --agent claude --skill ui
 ```
 
-Use one computer name: `home`, `office`, `laptop`, `studio`, `shop`, `travel`. A seventh computer is refused until one leaves. On Windows, use `py -3` instead of `python3`. Python 3.9 or newer is required.
+Use one computer name: `home`, `office`, `laptop`, `studio`, `shop`, `travel`. A seventh computer is refused until one leaves. Python 3.9 or newer is required.
+
+On Windows, double-click `launch.bat` in this folder. It starts the live room and leaves the window open with the link. The same options work there: `launch.bat --public-url https://your-tunnel.example`. In a terminal, `py -3` replaces `python3`.
 
 Across the internet, the computer running `serve` has to be reachable on port 8765. If you already have a tunnel, pass it:
 
