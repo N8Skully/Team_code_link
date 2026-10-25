@@ -187,6 +187,76 @@ class SameCodeTests(unittest.TestCase):
         )
         self.assertNotIn("<<<<<<<", subprocess.check_output(["git", "-C", str(self.origin), "show", "main:src/api.py"], text=True))
 
+    def test_dropped_work_waits_until_the_other_player_finishes(self) -> None:
+        os.environ["TEAM_LINK_STALE_SECONDS"] = "3"
+        self.addCleanup(lambda: os.environ.pop("TEAM_LINK_STALE_SECONDS", None))
+        self.server.hub.close()
+        self.server.shutdown()
+        self.server.server_close()
+        self.server = livehub.make_server("127.0.0.1", 0, Path(self.tmp.name) / "hub-drop")
+        self.addCleanup(self.server.hub.close)
+        thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(self.server.shutdown)
+        self.addCleanup(self.server.server_close)
+        port = self.server.server_address[1]
+        link = f"http://127.0.0.1:{port}/?token={self.server.hub.room_token}"
+        studio = Path(self.tmp.name) / "studio"
+        subprocess.run(["git", "clone", str(self.origin), str(studio)], check=True, capture_output=True)
+        configure(studio)
+
+        self.assertEqual(self.run_cli(self.home, "link", link).returncode, 0)
+        self.assertEqual(self.run_cli(self.office, "link", link).returncode, 0)
+        self.assertEqual(self.run_cli(studio, "link", link).returncode, 0)
+        self.assertEqual(self.run_cli(self.home, "join", "--name", "home", "--agent", "claude", "--skill", "ui").returncode, 0)
+        self.assertEqual(self.run_cli(self.office, "join", "--name", "office", "--agent", "cursor", "--skill", "api").returncode, 0)
+        plan = Path(self.tmp.name) / "plan-drop.json"
+        plan.write_text(
+            json.dumps(
+                {
+                    "title": "Ship login",
+                    "summary": "One piece.",
+                    "framework": "The form calls the session API.",
+                    "tasks": [
+                        {"title": "Login form", "brief": "Draw the form", "skills": ["ui"], "connects": ["Session API"]},
+                        {"title": "Session API", "brief": "Own the session", "skills": ["api"], "connects": ["Login form"]},
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        planned = self.run_cli(self.home, "conduct")
+        self.assertEqual(planned.returncode, 0, planned.stderr)
+        planned = self.run_cli(self.home, "plan", "--file", str(plan))
+        self.assertEqual(planned.returncode, 0, planned.stderr)
+        self.commit_file(self.home, "src/form.py", "half-done\n", "form in progress")
+        self.assertEqual(self.run_cli(self.home, "sync").returncode, 0)
+        office_sync = self.run_cli(self.office, "sync")
+        self.assertEqual(office_sync.returncode, 0, office_sync.stderr)
+        self.commit_file(self.office, "src/api.py", "session = {}\n", "api in progress")
+        self.assertEqual(self.run_cli(self.office, "sync").returncode, 0)
+
+        for _ in range(5):
+            self.assertEqual(self.run_cli(self.office, "room").returncode, 0)
+            import time
+            time.sleep(1)
+        waiting = self.run_cli(self.office, "room")
+        self.assertEqual(waiting.returncode, 0, waiting.stderr)
+        self.assertIn("home/claude (connection lost)", waiting.stdout)
+        self.assertIn("t1 Login form [waiting]", waiting.stdout)
+        self.assertIn("Your part: t2 Session API", waiting.stdout)
+
+        arrived = self.run_cli(studio, "join", "--name", "studio", "--agent", "hermes", "--skill", "ui")
+        self.assertEqual(arrived.returncode, 0, arrived.stderr)
+        self.assertNotIn("Your part: t1", arrived.stdout)
+        self.assertIn("t1 Login form [waiting]", arrived.stdout)
+
+        finished = self.run_cli(self.office, "finish")
+        self.assertEqual(finished.returncode, 0, finished.stderr)
+        self.assertIn("Your part: t1 Login form", finished.stdout)
+        self.assertEqual(git(self.office, "branch", "--show-current").stdout.strip(), "part/t1")
+        self.assertEqual((self.office / "src/form.py").read_text(encoding="utf-8"), "half-done\n")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -409,7 +409,13 @@ def finish(state: dict, key: str, task_id: str | None = None, next_approach: str
     _step_off(state, key, current, moment, leaving=False)
     if next_approach:
         next_approach = validate_text(next_approach)
-    balance(state, approaches={key: next_approach} if next_approach else None, avoid={key: current}, at=moment)
+    balance(
+        state,
+        approaches={key: next_approach} if next_approach else None,
+        avoid={key: current},
+        claim_waiting=[key],
+        at=moment,
+    )
 
 
 def place(state: dict, conductor: str, player_key: str, task_id: str, now: str | None = None) -> None:
@@ -541,11 +547,11 @@ def _step_off(state: dict, key: str, task_id: str, moment: str, leaving: bool, d
     if task["status"] == "active" and not task["members"]:
         task["lead"] = None
         if dropped:
-            task["status"] = "open"
+            task["status"] = "waiting"
             _event(
                 state,
                 "waiting",
-                f"{task['title']} is waiting. {key} lost connection.",
+                f"{task['title']} is waiting until another player finishes their run.",
                 at=moment,
                 agent=key,
                 task=task_id,
@@ -581,8 +587,6 @@ def sweep(state: dict, now: str | None = None, limit: int | None = None) -> list
             _step_off(state, key, task_id, moment, leaving=True, dropped=True)
         _event(state, "lost", f"{key} lost connection.", at=moment, agent=key)
         lost.append(key)
-    if lost:
-        balance(state, at=moment)
     return lost
 
 
@@ -623,11 +627,32 @@ def _join_part(state: dict, task: dict, key: str, moment: str, role: str) -> Non
     )
 
 
-def balance(state: dict, approaches: dict | None = None, avoid: dict | None = None, at: str | None = None) -> list:
+def balance(
+    state: dict,
+    approaches: dict | None = None,
+    avoid: dict | None = None,
+    claim_waiting: list[str] | None = None,
+    at: str | None = None,
+) -> list:
     moment = at or utc_now()
     approaches = approaches or {}
     avoid = avoid or {}
     free = _free_agents(state)
+    waiting = [task for task in state["tasks"] if task["status"] == "waiting"]
+    for key in claim_waiting or []:
+        if key not in free or not waiting:
+            continue
+        ranked = [
+            (score(state, key, task), task["n"], task)
+            for task in waiting
+            if avoid.get(key) != task["id"]
+        ]
+        if not ranked:
+            continue
+        _best, _order, task = sorted(ranked, key=lambda item: (-item[0], item[1]))[0]
+        _become_lead(state, task, key, approaches.get(key), moment)
+        free.remove(key)
+        waiting.remove(task)
     open_tasks = [task for task in state["tasks"] if task["status"] == "open"]
     while free and open_tasks:
         ranked = []

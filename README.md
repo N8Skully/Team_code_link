@@ -98,7 +98,7 @@ python3 scripts/workspace.py say --text "Starting the form. I will edit src/logi
 python3 scripts/workspace.py say --task t1 --text "The field names are email and password."
 ```
 
-If a player goes silent, the room keeps their seat and lets the part go on without them. They join again to come back into the plan. A player who arrives after the plan has started is given a part that still needs someone.
+If a player goes silent mid-part, that part waits. It is not handed to someone who is still in the middle of another run, and a new arrival does not take it. The player who finishes their own run picks it up, on the same branch, with the work that was already committed.
 
 When your share is done:
 
