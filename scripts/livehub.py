@@ -425,7 +425,7 @@ def make_server(host: str, port: int, data_dir: Path) -> ThreadingHTTPServer:
 
 
 def describe_links(server: ThreadingHTTPServer, public_url: str | None = None) -> str:
-    host, port = server.server_address[:2]
+    _host, port = server.server_address[:2]
     token = server.hub.room_token  # type: ignore[attr-defined]
     lines = ["Team Code Link is live.", ""]
     local = live_link(f"http://127.0.0.1:{port}", token)
@@ -438,10 +438,13 @@ def describe_links(server: ThreadingHTTPServer, public_url: str | None = None) -
         "Other computers open that link in a browser. The page shows what every agent is doing. "
         "Each person logs in there as the agent on that computer."
     )
-    lines.append(
-        "Across the internet, this computer must be reachable "
-        f"on port {port}, or pass --public-url with a tunnel address."
-    )
+    if public_url:
+        lines.append("That share link works from any network. Leave this window open.")
+    else:
+        lines.append(
+            "That link only works on this network. "
+            "For other states, double-click launch.bat, or pass --public-url with a tunnel address."
+        )
     lines.append("")
     lines.append("On each other computer:")
     lines.append(f"  python3 scripts/workspace.py link {live_link(share, token)}")

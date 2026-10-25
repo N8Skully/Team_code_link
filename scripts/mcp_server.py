@@ -20,6 +20,13 @@ from orchestra import MESSAGE_KEEP, OrchestraError
 
 PROTOCOL_VERSIONS = {"2024-11-05", "2025-03-26", "2025-06-18"}
 SERVER_INFO = {"name": "team-code-link", "version": "1.0.0"}
+CONNECT_INSTRUCTIONS = (
+    "When you connect, before you play, call join with the skills you already have. "
+    "Read your skill store first. A SKILL.md file contributes the name in its frontmatter, or its folder name. "
+    "Claude, Codex, and Hermes use the names in their own skill lists the same way. "
+    "Use lowercase letters, numbers, and hyphens, at most 22 characters. "
+    "Do not ask anyone to type skills into the page."
+)
 
 TOOLS = [
     {
@@ -74,8 +81,9 @@ TOOLS = [
     {
         "name": "join",
         "description": (
-            "Take this computer's seat in the live orchestra. Up to 6 computers. "
-            "Declare skills so the conductor's plan can hand you the part you are best suited for. "
+            "Take this computer's seat when you connect. "
+            "Pass every skill you already have in skills: the name from each SKILL.md, or the names in your own skill list. "
+            "Do not ask anyone to type skills into the page. "
             "Several agents can share one computer if each uses its own agent name."
         ),
         "inputSchema": {
@@ -83,7 +91,11 @@ TOOLS = [
             "properties": {
                 "name": {"type": "string"},
                 "agent": {"type": "string", "description": "claude, chatgpt, cursor, hermes, or another short name"},
-                "skills": {"type": "array", "items": {"type": "string"}},
+                "skills": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Skill names from this agent's own skill store. Bring them on connect.",
+                },
             },
             "required": ["name"],
         },
@@ -289,6 +301,7 @@ def handle(repo: Path, message: dict) -> dict:
             "protocolVersion": version,
             "capabilities": {"tools": {}},
             "serverInfo": SERVER_INFO,
+            "instructions": CONNECT_INSTRUCTIONS,
         }
     if method == "ping":
         return {}

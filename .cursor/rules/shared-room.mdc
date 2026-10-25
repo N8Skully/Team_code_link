@@ -5,6 +5,7 @@ alwaysApply: true
 
 This project is a live orchestra of up to six computers. One agent is the conductor. The others play the parts.
 
+- When you connect, bring the skills you already have before you play. Read your own skill store (each SKILL.md name, or your agent's own list) and pass those names to `join`. Do not ask anyone to type skills into the page.
 - Read the live score with the `room` tool, or `python3 scripts/workspace.py room`, before you edit.
 - Play only your assigned part. Follow the approach on that part. The framework says how parts connect.
 - When your share is done, call `finish`. If another part is waiting, you lead it and set the approach. If not, you join a teammate and follow theirs.
