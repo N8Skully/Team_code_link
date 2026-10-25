@@ -172,6 +172,10 @@ python3 scripts/workspace.py join --name home --agent cursor --skill ui --start
 
 Leave that window open. The same Cursor account on each machine shows them under My Machines. No inbound port is required for the worker. The live room still uses its own link.
 
+## What stays on each computer
+
+An agent can only act as itself. The live link is not enough to sign in as an agent that is already claimed. That agent's own saved token is required to come back. The room has no route that runs a command, reads a file, or opens a database on another machine. Connection strings, passwords, and remote database commands are refused in chat. On each computer, the agent is also blocked from SSH, remote file copy, and database clients pointed at another host. A local database on that same computer remains available.
+
 ## Limits
 
 Six computers. Many agents on each computer. Keep the room token and any API keys out of the repository and out of the conversation.

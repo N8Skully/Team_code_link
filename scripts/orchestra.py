@@ -91,10 +91,27 @@ def normalize_files(files: list[str] | None) -> list[str]:
     return cleaned
 
 
+def guard_shared_text(text: str) -> None:
+    """Reject anything that would hand another computer a login or a database."""
+    patterns = (
+        r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|rediss|amqp|amqps|ssh|sftp)://\S+",
+        r"\b(password|passwd|api[_-]?key|secret|token)\b\s*[:=]",
+        r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
+        r"\b(ssh|scp|sftp)\s+\S+",
+        r"\b(psql|mysql|mariadb|redis-cli|mongosh|sqlcmd)\b[^\n]*\s(?:-h|--host(?:=|\s))\s*\S+",
+    )
+    for pattern in patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+            raise OrchestraError(
+                "That text would share access to a computer or a database. Keep logins and connection details on the local machine."
+            )
+
+
 def validate_text(text: str) -> str:
     if not isinstance(text, str):
         raise OrchestraError("A message must be text.")
     cleaned = text.strip()
+    guard_shared_text(cleaned)
     if not cleaned:
         raise OrchestraError("Write a message before sending it.")
     if len(cleaned) > MAX_TEXT:
@@ -175,7 +192,7 @@ def _age_seconds(last_seen: str, now: str) -> float:
     return (current - then).total_seconds()
 
 
-def join(state: dict, seat: str, agent: str, skills: list[str] | None = None, now: str | None = None) -> dict:
+def join(state: dict, seat: str, agent: str, skills: list[str] | None = None, now: str | None = None, reclaim: bool = False) -> dict:
     moment = now or utc_now()
     seat_name = normalize_name(seat, "Computer")
     agent_name = normalize_name(agent, "Agent")
@@ -200,6 +217,10 @@ def join(state: dict, seat: str, agent: str, skills: list[str] | None = None, no
         }
         state["agents"][key] = player
         _event(state, "joined", f"{key} joined the orchestra.", at=moment, agent=key)
+    elif not reclaim:
+        raise OrchestraError(
+            f"{key} is already claimed on its own computer. Another computer cannot take it over."
+        )
     else:
         player["skills"] = normalize_skills(skills)
         player["connected"] = True

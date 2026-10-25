@@ -43,7 +43,12 @@ class Hub:
             with self.cond:
                 if self._closed:
                     return
-                self._sweep_locked()
+                try:
+                    self._sweep_locked()
+                except OSError:
+                    if self._closed:
+                        return
+                    raise
 
     def _heartbeat_locked(self, viewer: str | None) -> None:
         if not viewer:
@@ -73,6 +78,8 @@ class Hub:
                 self.state = loaded
 
     def _save(self) -> None:
+        if self._closed or not self.data_dir.exists():
+            return
         path = self.data_dir / STATE_NAME
         temporary = path.with_suffix(".json.tmp")
         temporary.write_text(json.dumps(self.state), encoding="utf-8")
@@ -359,8 +366,21 @@ class Handler(BaseHTTPRequestHandler):
         seat = payload.get("seat") or payload.get("name") or ""
         agent = payload.get("agent") or "agent"
 
+        presented = self._agent_token()
+
         def apply(state: dict) -> dict:
-            player = orchestra.join(state, seat, agent, payload.get("skills") or [])
+            key = orchestra.agent_key(seat, agent)
+            existing = state["agents"].get(key)
+            if existing is None:
+                player = orchestra.join(state, seat, agent, payload.get("skills") or [])
+            else:
+                stored = existing.get("token") or ""
+                proven = bool(presented) and len(presented) == len(stored) and secrets.compare_digest(presented, stored)
+                if not proven:
+                    raise orchestra.OrchestraError(
+                        f"{key} is already claimed on its own computer. Another computer cannot take it over."
+                    )
+                player = orchestra.join(state, seat, agent, payload.get("skills") or [], reclaim=True)
             if not player.get("token"):
                 player["token"] = secrets.token_urlsafe(24)
             return {"token": player["token"], "agent": player["key"]}
