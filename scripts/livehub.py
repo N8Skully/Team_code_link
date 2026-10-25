@@ -15,6 +15,8 @@ from urllib.parse import parse_qs, urlparse
 
 import orchestra
 
+WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
+
 TOKEN_NAME = "room.token"
 STATE_NAME = "room.json"
 
@@ -213,6 +215,14 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def _send_file(self, path: Path, content_type: str) -> None:
+        raw = path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
     def _guard(self) -> bool:
         if self.hub.authorized(self._token()):
             return True
@@ -226,7 +236,20 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             if path == "/":
-                self._send(200, PAGE, "text/html; charset=utf-8")
+                self._send_file(WEB_ROOT / "index.html", "text/html; charset=utf-8")
+                return
+            if path.startswith("/assets/"):
+                rel = path[len("/assets/") :]
+                if not rel or ".." in Path(rel).parts:
+                    self._send(404, {"error": "Not found."})
+                    return
+                asset_root = (WEB_ROOT / "assets").resolve()
+                target = (asset_root / rel).resolve()
+                if not target.is_relative_to(asset_root) or not target.is_file():
+                    self._send(404, {"error": "Not found."})
+                    return
+                kind = "image/png" if target.suffix == ".png" else "image/jpeg"
+                self._send_file(target, kind)
                 return
             if not self._guard():
                 return
@@ -365,144 +388,6 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.wfile.write(b": keep\n\n")
             self.wfile.flush()
-
-
-PAGE = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Team Code Link</title>
-<style>
-  :root { color-scheme: light; }
-  body { margin: 0; background: #f3efe6; color: #1d1a16; font: 18px/1.45 Georgia, "Iowan Old Style", serif; }
-  main { max-width: 920px; margin: 0 auto; padding: 36px 20px 96px; }
-  h1 { font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; font-size: 22px; margin: 0 0 8px; }
-  h2 { font: 13px/1.2 ui-sans-serif, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: #6d6458; margin: 28px 0 8px; }
-  p { margin: 0 0 10px; }
-  .live { font: 13px/1.2 ui-sans-serif, sans-serif; color: #0c6b3c; letter-spacing: 0.08em; text-transform: uppercase; }
-  .framework { font-size: 22px; }
-  .part { display: grid; grid-template-columns: 92px 1fr; gap: 8px 16px; padding: 14px 0; border-top: 1px solid #ddd4c6; }
-  .status { font: 13px/1.3 ui-sans-serif, sans-serif; color: #6d6458; }
-  form { display: flex; gap: 8px; margin-top: 16px; }
-  input { font: 16px/1.3 ui-sans-serif, sans-serif; padding: 8px 10px; border: 1px solid #c8bfb1; background: #fff; flex: 1; }
-  button { font: 15px/1.2 ui-sans-serif, sans-serif; padding: 8px 14px; background: #1d1a16; color: #f3efe6; border: 0; }
-  #log p { font: 15px/1.4 ui-sans-serif, sans-serif; margin: 0 0 8px; }
-</style>
-</head>
-<body>
-<main>
-  <p class="live" id="presence">Live room</p>
-  <h1>Team Code Link</h1>
-  <div id="gate"></div>
-  <div id="score" hidden></div>
-</main>
-<script>
-const gate = document.getElementById("gate");
-const score = document.getElementById("score");
-const presence = document.getElementById("presence");
-const params = new URLSearchParams(location.search);
-let token = params.get("token") || sessionStorage.getItem("team-link-token") || "";
-
-function node(tag, text) {
-  const el = document.createElement(tag);
-  if (text != null) el.textContent = text;
-  return el;
-}
-
-function showGate() {
-  score.hidden = true;
-  gate.replaceChildren(node("p", "Paste the live link from the computer running the room, or the token printed next to it."));
-  const form = document.createElement("form");
-  const input = document.createElement("input");
-  input.placeholder = "Token or full live link";
-  input.autocomplete = "off";
-  const button = document.createElement("button");
-  button.type = "submit";
-  button.textContent = "Connect";
-  form.append(input, button);
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const raw = input.value.trim();
-    const found = raw.match(/token=([^&]+)/);
-    token = found ? decodeURIComponent(found[1]) : raw;
-    sessionStorage.setItem("team-link-token", token);
-    connect();
-  });
-  gate.append(form);
-}
-
-function render(data) {
-  const snap = data.snapshot;
-  score.hidden = false;
-  gate.replaceChildren();
-  score.replaceChildren();
-  const plan = snap.plan;
-  score.append(node("h2", "Conductor"));
-  score.append(node("p", snap.conductor || "The podium is open."));
-  score.append(node("p", "Computers " + snap.seatCount + "/" + snap.capacity + " · " + (snap.agents.map((player) => player.key).join(", ") || "no players yet")));
-  score.append(node("h2", "Framework"));
-  score.append(node("p", plan ? plan.framework : "The conductor has not published a plan yet."));
-  if (plan && plan.summary) score.append(node("p", plan.summary));
-  score.append(node("h2", "Parts"));
-  if (!snap.tasks.length) score.append(node("p", "No parts yet."));
-  snap.tasks.forEach((task) => {
-    const row = node("div");
-    row.className = "part";
-    const meta = node("div");
-    meta.className = "status";
-    meta.textContent = task.status + (task.partitioned ? " · partitioned" : "");
-    const body = node("div");
-    body.append(node("p", task.title));
-    const people = task.lead ? ("Lead " + task.lead + (task.members.length > 1 ? " · with " + task.members.filter((member) => member !== task.lead).join(", ") : "")) : "Waiting for a player";
-    body.append(node("p", people));
-    if (task.approach && task.status !== "done") body.append(node("p", "Approach: " + task.approach));
-    if (task.connects && task.connects.length) body.append(node("p", "Connects to " + task.connects.join(", ")));
-    row.append(meta, body);
-    score.append(row);
-  });
-  score.append(node("h2", "Room"));
-  const log = node("div");
-  log.id = "log";
-  const messages = snap.messages || [];
-  if (!messages.length) log.append(node("p", "No one has spoken yet."));
-  messages.slice(-20).forEach((message) => {
-    log.append(node("p", message.agent + ": " + message.text));
-  });
-  score.append(log);
-}
-
-async function refresh() {
-  const response = await fetch("/v1/score?token=" + encodeURIComponent(token));
-  if (!response.ok) {
-    presence.textContent = "Link refused";
-    showGate();
-    return;
-  }
-  presence.textContent = "Live";
-  render(await response.json());
-}
-
-function connect() {
-  if (!token) {
-    showGate();
-    return;
-  }
-  refresh().catch(() => { presence.textContent = "Reconnecting"; });
-  if (window._link) window._link.close();
-  const source = new EventSource("/v1/events?token=" + encodeURIComponent(token));
-  window._link = source;
-  source.onmessage = () => refresh().catch(() => {});
-  source.onerror = () => { presence.textContent = "Reconnecting"; };
-  clearInterval(window._poll);
-  window._poll = setInterval(() => refresh().catch(() => {}), 5000);
-}
-
-connect();
-</script>
-</body>
-</html>
-"""
 
 
 def make_server(host: str, port: int, data_dir: Path) -> ThreadingHTTPServer:

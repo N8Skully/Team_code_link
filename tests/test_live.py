@@ -78,6 +78,9 @@ class LiveRoomTests(unittest.TestCase):
         port = self.server.server_address[1]
         page = urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5).read().decode()
         self.assertIn("Team Code Link", page)
+        self.assertIn("Room chat", page)
+        asset = urllib.request.urlopen(f"http://127.0.0.1:{port}/assets/mark.png", timeout=5)
+        self.assertTrue(asset.read(8).startswith(b"\x89PNG"))
         score = urllib.request.urlopen(
             f"http://127.0.0.1:{port}/v1/score?token={self.server.hub.room_token}",
             timeout=5,

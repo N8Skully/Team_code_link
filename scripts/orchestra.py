@@ -472,6 +472,10 @@ def help_on(state: dict, key: str, task_id: str, now: str | None = None) -> None
     task = task_by_id(state, task_id)
     if task["status"] == "done":
         raise OrchestraError(f"{task['title']} is already complete.")
+    if task["status"] == "waiting":
+        raise OrchestraError(
+            "That part is waiting. It is picked up when a player finishes the run they are already on."
+        )
     if player.get("task") and player["task"] != task_id:
         current = task_by_id(state, player["task"])
         if current["status"] == "active":
@@ -741,7 +745,7 @@ def public_state(state: dict, viewer: str | None) -> dict:
             "lead": task["lead"],
             "members": list(task["members"]),
             "skills": list(task["skills"]),
-            "connects": list(task["connects"]) if heard else [],
+            "connects": list(task["connects"]),
             "interface": task["interface"] if heard else "",
             "brief": task["brief"] if heard else "",
             "approach": task["approach"] if heard else "",
