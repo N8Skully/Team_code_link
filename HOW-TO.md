@@ -39,39 +39,32 @@ Computer names, agent names, and skills are short lowercase letters, numbers, an
 
 One computer hosts. Everyone else connects to it. The host runs the room and leaves that window open. The other computers do not run `serve`, and they do not open a port.
 
-On the host:
+On Windows, double-click `launch.bat`. The first time, it installs Cloudflare Tunnel. Windows may ask you to approve that once. The tunnel makes an outbound connection, so the host does not accept inbound traffic from the internet.
 
-Windows: double-click `launch.bat`.
-
-Mac or Linux:
-
-```bash
-python3 scripts/workspace.py serve
-```
-
-The window prints:
-
-- **This computer.** Open this link in a browser on the host. It starts with `127.0.0.1`. It does not work from any other machine.
-- **Share this link.** Send this to the other computers. On the same Wi-Fi or office, it is the host's address on that network.
-
-Same network: send the share link. The other computers open it. That is the whole network setup.
-
-Somewhere else on the internet, pick one of these:
-
-- Make the host reachable on port 8765. That is a port forward on the host's router, and the host's firewall must allow the port. Send the share link.
-- Or use a tunnel you already have. Start the room with the public address, then send the link the window prints:
+On Mac or Linux, point a tunnel at port 8765, then:
 
 ```bash
 python3 scripts/workspace.py serve --public-url https://your-tunnel.example
 ```
 
-Windows:
+The window prints:
 
-```bat
-launch.bat --public-url https://your-tunnel.example
+- **This computer.** Open this link in a browser on the host. It starts with `127.0.0.1`. It does not work from any other machine.
+- **Share this link.** Send this whole line to the other computers. It works from any network, including another state.
+
+The share link changes each time the host window starts. Send the new one. The room token on the host stays in the host's data folder.
+
+Same Wi-Fi only, with no internet link: `launch.bat --local`, or `python3 scripts/workspace.py serve` with no public address. That share link is the host's address on the local network.
+
+If you already have a public address:
+
+```bash
+python3 scripts/workspace.py serve --public-url https://your-tunnel.example
 ```
 
-Closing the host window stops the room for every computer. Start it again in the same folder and the same link keeps working. The room token is saved on the host.
+Windows: `launch.bat --public-url https://your-tunnel.example`.
+
+Closing the host window stops the room for every computer.
 
 The host can also be a player. Hosting does not log anyone in. The person at the host computer joins with the steps below, using the **This computer** link.
 
@@ -97,7 +90,7 @@ Then use **Log in on this computer**:
 
 - **Computer** is the name of this machine, such as `home`, `office`, or `laptop`.
 - **Agent** is who is playing on it, such as `claude`, `cursor`, `chatgpt`, or `hermes`.
-- **Skills** are what that agent is suited for, separated by commas, such as `ui` or `api`.
+- Leave **Skills** empty if that box is on the page. The agent brings them when it connects.
 
 Click **Log in**.
 
@@ -114,11 +107,18 @@ A private browser window is another join. Use a different computer name and agen
 Clone this project on that computer if it is not there yet. Then paste the whole live link. The host uses the **This computer** link. Every other computer uses the share link.
 
 ```bash
-python3 scripts/workspace.py link "http://THE-LINK/?token=..."
-python3 scripts/workspace.py join --name office --agent cursor --skill api
+python3 scripts/workspace.py link "https://THE-SHARE-LINK/?token=..."
 ```
 
 On Windows, use `py -3` in place of `python3` for this and for every command below.
+
+When the agent connects, it is told to read its own skill store and pass those names to `join`. A `SKILL.md` file contributes the name in its frontmatter, or the folder name. Claude, Codex, and Hermes use the names in their own skill lists the same way. Names are lowercase letters, numbers, and hyphens, at most 22 characters. Do not type the list into the page.
+
+The same join by hand:
+
+```bash
+python3 scripts/workspace.py join --name office --agent cursor --skill blender-lighting --skill unity-developer
+```
 
 `link` saves the room on this computer. `join` takes the seat. The saved token for that agent stays on this computer. Another computer cannot log in as `office/cursor` after that. Coming back on this computer works, in this terminal or in the browser session that logged in.
 
@@ -129,7 +129,7 @@ The host joins the same way when someone there is playing. Use `--name home`, or
 More than one agent on one computer:
 
 ```bash
-python3 scripts/workspace.py join --name home --agent claude --skill ui
+python3 scripts/workspace.py join --name home --agent claude --skill blender-lighting
 python3 scripts/workspace.py join --name home --agent chatgpt --skill docs
 ```
 

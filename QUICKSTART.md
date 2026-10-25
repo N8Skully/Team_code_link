@@ -13,36 +13,22 @@ cd Team_code_link
 
 Do this on one computer only. That computer is the host. Leave its window open for the whole session. Closing it stops the room for everyone.
 
-On Windows, double-click `launch.bat`.
+On Windows, double-click `launch.bat`. The first time, it installs Cloudflare Tunnel. Windows may ask you to approve that once. The window then prints:
 
-On Mac or Linux:
+- **This computer** works only on the host. It starts with `127.0.0.1`. Do not send it to anyone else.
+- **Share this link** is the invite. Send that whole line. It works from any network, including another state.
 
-```bash
-python3 scripts/workspace.py serve
-```
+The share link changes each time you start the host window. Send the new one.
 
-The window prints the links:
+Same Wi-Fi only, with no internet link: `launch.bat --local`.
 
-- **This computer** works only on the host. Open it in a browser on that machine.
-- **Share this link** is what you send to the other computers.
-
-People on the same Wi-Fi or office open the share link. No extra setup.
-
-People somewhere else on the internet need the host reachable on port 8765, or a tunnel you already have. Start the room with that public address and send the link it prints:
+On Mac or Linux, point a tunnel at port 8765, then:
 
 ```bash
 python3 scripts/workspace.py serve --public-url https://your-tunnel.example
 ```
 
-On Windows:
-
-```bat
-launch.bat --public-url https://your-tunnel.example
-```
-
-Do not send the `127.0.0.1` link to another computer. That address is only the host.
-
-Start the room again in the same folder later and the same link still works.
+If you already have a public address, Windows can use it too: `launch.bat --public-url https://your-tunnel.example`.
 
 The host does not have to play. Hosting is just this window. If someone on the host computer is also an agent, they join in the next section like everyone else.
 
@@ -52,28 +38,33 @@ Each player joins from their own computer. A browser login only controls that on
 
 ### Join in the browser
 
-1. Open the link the host sent. On the host itself, open the **This computer** link.
+1. Open the share link the host sent. On the host itself, open the **This computer** link.
 2. The page shows who is already playing. You can watch before you log in.
 3. Fill in **Log in on this computer**:
    - **Computer** is this machine, such as `home`, `office`, or `laptop`.
    - **Agent** is who is playing, such as `claude`, `cursor`, `chatgpt`, or `hermes`.
-   - **Skills** are what they are good at, such as `ui` or `api`.
+   - Leave **Skills** empty if that box is on the page.
 4. Click **Log in**.
 
-A second computer might use `office`, `cursor`, and `api`. The first might use `home`, `claude`, and `ui`.
+When the agent connects, it reads the skills it already has and joins with those names. Do not type that list. A `SKILL.md` file uses the name in its frontmatter, or the folder name. Each name is lowercase letters, numbers, and hyphens, at most 22 characters.
 
 To join twice from one PC, open a private window and log in with a different computer name and agent.
 
 ### Join in the terminal
 
-Do this on every computer that will edit the project or run an agent. Clone the repo there first, then paste the whole live link:
+Do this on every computer that will edit the project or run an agent. Clone the repo there first, then paste the whole share link:
 
 ```bash
-python3 scripts/workspace.py link "http://THE-LINK/?token=..."
-python3 scripts/workspace.py join --name office --agent cursor --skill api
+python3 scripts/workspace.py link "https://THE-SHARE-LINK/?token=..."
 ```
 
 On Windows, use `py -3` instead of `python3`.
+
+The agent then connects and brings its skills. The same join by hand looks like this:
+
+```bash
+python3 scripts/workspace.py join --name office --agent cursor --skill blender-lighting --skill unity-developer
+```
 
 `link` saves the room on that computer. `join` takes the seat. Up to six computers can be in the room.
 
