@@ -35,14 +35,14 @@
   .rule { display: block; width: min(720px, 100%); height: 28px; object-fit: contain; margin: 8px 0 16px; }
   .layout {
     display: grid;
-    grid-template-columns: 230px minmax(0, 1fr) 320px;
-    grid-template-areas: "players board chat" "you you chat";
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-areas: "board chat" "session chat";
     gap: 16px;
+    margin-top: 16px;
   }
-  .players { grid-area: players; }
   .board { grid-area: board; }
-  .chat { grid-area: chat; min-height: 520px; display: flex; flex-direction: column; }
-  .you { grid-area: you; }
+  .chat { grid-area: chat; min-height: 480px; display: flex; flex-direction: column; }
+  .session { grid-area: session; }
   .panel { position: relative; background: var(--panel); border: 1px solid var(--edge); border-radius: 18px; padding: 16px; }
   .corner { position: absolute; width: 36px; height: 36px; pointer-events: none; }
   .tl { top: -1px; left: -1px; }
@@ -50,13 +50,12 @@
   .bl { bottom: -1px; left: -1px; transform: scaleY(-1); }
   .br { bottom: -1px; right: -1px; transform: scale(-1); }
   h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
-  .person, .card { display: flex; gap: 10px; align-items: center; }
-  .person img, .card img, button img { width: 28px; height: 28px; object-fit: contain; }
-  .person { padding: 8px 0; border-bottom: 1px solid rgba(186, 140, 255, 0.12); }
-  .person small, .muted { color: var(--muted); }
-  .lost { opacity: 0.55; }
+  h2.sub { margin-top: 16px; }
+  .card { display: flex; gap: 10px; align-items: center; }
+  .card img, button img, .agent img { width: 28px; height: 28px; object-fit: contain; }
+  small, .muted { color: var(--muted); }
   .framework { margin: 0 0 14px; color: #efe7ff; }
-  #board { position: relative; min-height: 280px; }
+  #board { position: relative; min-height: 220px; }
   #cards { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 22px; }
   .card {
     width: 210px;
@@ -70,11 +69,27 @@
   .card.mine { border-color: rgba(210, 170, 255, 0.85); box-shadow: 0 0 0 1px rgba(192, 132, 252, 0.25); }
   .card.waiting { opacity: 0.8; }
   .card.done { opacity: 0.5; }
-  .card strong { display: block; }
+  .card strong, .agent strong { display: block; }
   #links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-  #log { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+  #log, .activity { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; min-height: 180px; }
+  .activity { max-height: 240px; flex: none; }
   .bubble { background: rgba(8, 6, 14, 0.55); border-radius: 12px; padding: 8px 10px; }
   .bubble b { font-weight: 600; }
+  .now-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .agent {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    width: 100%;
+    text-align: left;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid var(--edge);
+    background: rgba(8, 6, 14, 0.72);
+    cursor: pointer;
+  }
+  .agent.you { border-color: rgba(210, 170, 255, 0.85); box-shadow: 0 0 0 1px rgba(192, 132, 252, 0.25); }
+  .agent.lost { opacity: 0.55; }
   form.row, .row { display: flex; gap: 8px; }
   input, textarea, select, button {
     font: inherit;
@@ -88,14 +103,20 @@
   button { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; background: #1a1324; }
   button:hover { border-color: var(--violet); }
   button img { width: 18px; height: 18px; }
+  .agent img { width: 34px; height: 34px; flex: none; }
+  button:disabled { opacity: 0.55; cursor: default; }
   .hint { color: var(--muted); font-size: 13px; }
-  #notice { min-height: 1.2em; color: #f0c8ff; }
-  #gate { max-width: 460px; }
-  #app[hidden], #gate[hidden] { display: none; }
+  #notice, #gate-notice, #login-notice { min-height: 1.2em; color: #f0c8ff; }
+  #link-gate { max-width: 460px; }
+  #shell[hidden], #link-gate[hidden], #login[hidden], #you[hidden], #composer[hidden], #chat-lock[hidden] { display: none; }
   label { display: block; margin: 10px 0; color: var(--muted); font-size: 13px; }
+  .login-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 10px; align-items: end; }
+  .login-grid label { margin: 0; }
+  .login-grid input { width: 100%; }
   @media (max-width: 980px) {
-    .layout { grid-template-columns: 1fr; grid-template-areas: "players" "board" "you" "chat"; }
+    .layout { grid-template-columns: 1fr; grid-template-areas: "board" "session" "chat"; }
     .chat { min-height: 420px; }
+    .login-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -111,32 +132,33 @@
   </header>
   <img class="rule" src="/assets/trim-rule.png" alt="">
 
-  <section class="panel" id="gate">
+  <section class="panel" id="link-gate">
     <img class="corner tl" src="/assets/trim-corner.png" alt="">
     <img class="corner tr" src="/assets/trim-corner.png" alt="">
     <img class="corner bl" src="/assets/trim-corner.png" alt="">
     <img class="corner br" src="/assets/trim-corner.png" alt="">
-    <h2>Enter as your agent</h2>
-    <p class="hint">Paste the live link if it is not already in the address bar. You will only control the agent you enter as.</p>
+    <h2>Open the live room</h2>
+    <p class="hint">Paste the live link from the computer running the room. Every computer and user opens this same page.</p>
     <label>Live link or token<input id="token-input" autocomplete="off"></label>
-    <label>Computer<input id="seat-input" placeholder="home" autocomplete="off"></label>
-    <label>Agent<input id="agent-input" placeholder="claude" autocomplete="off"></label>
-    <label>Skills<input id="skill-input" placeholder="ui, api" autocomplete="off"></label>
-    <button id="enter" type="button">Enter</button>
+    <button id="open-room" type="button">Open the room</button>
     <p id="gate-notice"></p>
   </section>
 
-  <div id="app" hidden>
-    <div class="layout">
-      <section class="panel players">
-        <img class="corner tl" src="/assets/trim-corner.png" alt="">
-        <img class="corner tr" src="/assets/trim-corner.png" alt="">
-        <img class="corner bl" src="/assets/trim-corner.png" alt="">
-        <img class="corner br" src="/assets/trim-corner.png" alt="">
-        <h2>Players</h2>
-        <div id="players"></div>
-      </section>
+  <div id="shell" hidden>
+    <section class="panel now">
+      <img class="corner tl" src="/assets/trim-corner.png" alt="">
+      <img class="corner tr" src="/assets/trim-corner.png" alt="">
+      <img class="corner bl" src="/assets/trim-corner.png" alt="">
+      <img class="corner br" src="/assets/trim-corner.png" alt="">
+      <h2>What everyone is doing</h2>
+      <p class="framework" id="podium">Waiting for the room.</p>
+      <div id="now" class="now-grid"></div>
+      <h2 class="sub">Activity</h2>
+      <p class="hint" id="activity-note"></p>
+      <div id="activity" class="activity"></div>
+    </section>
 
+    <div class="layout">
       <section class="panel board">
         <img class="corner tl" src="/assets/trim-corner.png" alt="">
         <img class="corner tr" src="/assets/trim-corner.png" alt="">
@@ -158,28 +180,42 @@
         <img class="corner br" src="/assets/trim-corner.png" alt="">
         <h2><img src="/assets/icon-chat.png" alt="" style="width:18px;height:18px;vertical-align:-4px"> Room chat</h2>
         <div id="log"></div>
-        <form id="composer" class="row">
+        <p id="chat-lock" class="hint">Log in on this computer to speak as your agent.</p>
+        <form id="composer" class="row" hidden>
           <select id="channel" aria-label="Where to speak"></select>
           <input id="message" placeholder="Message the room" autocomplete="off">
           <button type="submit" aria-label="Send"><img src="/assets/icon-send.png" alt=""></button>
         </form>
       </section>
 
-      <section class="panel you">
+      <section class="panel session">
         <img class="corner tl" src="/assets/trim-corner.png" alt="">
         <img class="corner tr" src="/assets/trim-corner.png" alt="">
         <img class="corner bl" src="/assets/trim-corner.png" alt="">
         <img class="corner br" src="/assets/trim-corner.png" alt="">
-        <h2>Your agent</h2>
-        <p id="you-line"></p>
-        <p id="you-part" class="hint"></p>
-        <div class="row">
-          <button id="finish" type="button" hidden>Finish my part</button>
-          <button id="save-approach" type="button" hidden>Save approach</button>
+        <h2 id="session-title">This computer</h2>
+        <form id="login">
+          <p class="hint">Log in on this computer as your agent. This screen only controls that agent.</p>
+          <div class="login-grid">
+            <label>Computer<input id="seat-input" placeholder="e.g. home" autocomplete="off"></label>
+            <label>Agent<input id="agent-input" placeholder="e.g. claude" autocomplete="off"></label>
+            <label>Skills<input id="skill-input" placeholder="e.g. ui, api" autocomplete="off"></label>
+            <button id="enter" type="submit">Log in</button>
+          </div>
+          <p id="login-notice"></p>
+        </form>
+        <div id="you" hidden>
+          <p id="you-line"></p>
+          <p id="you-part" class="hint"></p>
+          <div class="row">
+            <button id="finish" type="button" hidden>Finish my part</button>
+            <button id="save-approach" type="button" hidden>Save approach</button>
+            <button id="leave" type="button">Leave this seat</button>
+          </div>
+          <label id="approach-label" hidden>Approach your teammates follow<textarea id="approach"></textarea></label>
+          <p class="hint">Controls on this screen act only as your agent. Run <code>python3 scripts/workspace.py sync</code> on your computer to pull the shared branch before you edit.</p>
+          <p id="notice"></p>
         </div>
-        <label id="approach-label" hidden>Approach your teammates follow<textarea id="approach"></textarea></label>
-        <p class="hint">Controls on this screen act only as your agent. Run <code>python3 scripts/workspace.py sync</code> on your computer to pull the shared branch before you edit.</p>
-        <p id="notice"></p>
       </section>
     </div>
   </div>
@@ -190,9 +226,11 @@ let token = params.get("token") || sessionStorage.getItem("team-link-token") || 
 let agentToken = sessionStorage.getItem("team-link-agent-token") || "";
 let you = sessionStorage.getItem("team-link-player") || "";
 let snapshot = null;
+let activity = [];
+let reclaiming = false;
 
-const gate = document.getElementById("gate");
-const app = document.getElementById("app");
+const linkGate = document.getElementById("link-gate");
+const shell = document.getElementById("shell");
 const presence = document.getElementById("presence");
 
 function el(tag, text, className) {
@@ -214,10 +252,13 @@ function tokenFrom(raw) {
   const found = String(raw || "").match(/token=([^&\s]+)/);
   return found ? decodeURIComponent(found[1]) : String(raw || "").trim();
 }
+function signedIn() {
+  return Boolean(agentToken);
+}
 
 async function api(method, path, body) {
   const headers = { Authorization: "Bearer " + token, Accept: "application/json" };
-  if (agentToken) headers["X-Agent-Token"] = agentToken;
+  if (agentToken && path !== "/v1/score") headers["X-Agent-Token"] = agentToken;
   if (body) headers["Content-Type"] = "application/json";
   const response = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
   const data = await response.json().catch(() => ({}));
@@ -226,39 +267,95 @@ async function api(method, path, body) {
 }
 
 function myTask() {
-  if (!snapshot || !you) return null;
+  if (!snapshot || !you || !signedIn()) return null;
   return (snapshot.tasks || []).find((task) => task.status === "active" && (task.members || []).includes(you)) || null;
+}
+
+function taskById(id) {
+  return (snapshot.tasks || []).find((task) => task.id === id) || null;
+}
+
+function showSession() {
+  const logged = signedIn();
+  document.getElementById("login").hidden = logged;
+  document.getElementById("you").hidden = !logged;
+  document.getElementById("composer").hidden = !logged;
+  document.getElementById("chat-lock").hidden = logged;
+  document.getElementById("session-title").textContent = logged ? "Your agent" : "Log in on this computer";
 }
 
 function render(data) {
   snapshot = data.snapshot;
-  you = snapshot.you || you;
+  activity = data.events || [];
+  if (signedIn()) you = snapshot.you || you;
+  const conductor = snapshot.conductor;
+  const watching = signedIn() && you === conductor;
+  let podium = conductor ? "Conductor: " + conductor + "." : "The conductor podium is open.";
+  podium += " Computers " + snapshot.seatCount + "/" + snapshot.capacity + ".";
+  if (watching) {
+    podium += " You are the conductor, so this board includes partitioned sections.";
+  } else if (signedIn()) {
+    podium += " Signed in as " + you + ". This screen only controls your agent.";
+  } else {
+    podium += " Watching the joint board. Log in on this computer to play.";
+  }
+  document.getElementById("podium").textContent = podium;
+  document.getElementById("activity-note").textContent = watching
+    ? "Full activity, including partitioned sections."
+    : "Activity the whole room can hear. Partitioned sections stay with their players and the conductor.";
   document.getElementById("framework").textContent = snapshot.plan
     ? snapshot.plan.framework
     : "The conductor has not published a plan yet.";
-  const players = document.getElementById("players");
-  players.replaceChildren();
-  const count = el("p", "Computers " + snapshot.seatCount + "/" + snapshot.capacity, "muted");
-  players.append(count);
-  (snapshot.agents || []).forEach((player) => {
-    const row = el("div", null, "person" + (player.connected ? "" : " lost"));
-    row.append(icon(player.key === snapshot.conductor ? "icon-conductor.png" : "icon-player.png"));
+
+  const now = document.getElementById("now");
+  now.replaceChildren();
+  const players = snapshot.agents || [];
+  if (!players.length) {
+    now.append(el("p", "No one has logged in yet. Log in on this computer to take a seat.", "hint"));
+  }
+  players.forEach((player) => {
+    const task = player.task ? taskById(player.task) : null;
+    const card = el("button", null, "agent" + (player.connected ? "" : " lost") + (player.key === you && signedIn() ? " you" : ""));
+    card.type = "button";
+    card.append(icon(player.key === conductor ? "icon-conductor.png" : "icon-player.png"));
     const text = el("div");
     text.append(el("strong", player.key));
-    const bits = [];
-    if (player.key === snapshot.conductor) bits.push("conductor");
-    if (player.key === you) bits.push("you");
+    const bits = [player.seat];
+    if (player.skills && player.skills.length) bits.push(player.skills.join(", "));
+    if (player.key === conductor) bits.push("conductor");
+    if (player.key === you && signedIn()) bits.push("you");
     if (!player.connected) bits.push("connection lost");
-    if (player.task) bits.push(player.task);
     text.append(el("small", bits.join(" · ")));
-    row.append(text);
-    players.append(row);
+    let doing = "No part yet";
+    if (!player.connected && task) doing = "Connection lost during " + task.title;
+    else if (!player.connected) doing = "Connection lost";
+    else if (task) {
+      const role = task.lead === player.key ? "Leading" : "Helping on";
+      doing = role + " " + task.title + " · " + task.status + " · " + task.branch;
+      if (task.partitioned) doing += " · partitioned";
+    }
+    text.append(el("div", doing));
+    if (task && task.approach) text.append(el("small", task.approach));
+    card.append(text);
+    if (task) card.addEventListener("click", () => showDetail(task));
+    now.append(card);
   });
+
+  const feed = document.getElementById("activity");
+  feed.replaceChildren();
+  if (!activity.length) feed.append(el("p", "No activity yet.", "hint"));
+  activity.forEach((event) => {
+    const row = el("div", null, "bubble");
+    if (event.at) row.append(el("small", event.at));
+    row.append(el("div", event.text));
+    feed.append(row);
+  });
+  feed.scrollTop = feed.scrollHeight;
 
   const cards = document.getElementById("cards");
   cards.replaceChildren();
   (snapshot.tasks || []).forEach((task) => {
-    const card = el("button", null, "card " + task.status + ((task.members || []).includes(you) ? " mine" : ""));
+    const card = el("button", null, "card " + task.status + ((task.members || []).includes(you) && signedIn() ? " mine" : ""));
     card.type = "button";
     card.dataset.id = task.id;
     card.dataset.title = task.title;
@@ -266,7 +363,8 @@ function render(data) {
     card.append(icon(mark));
     const text = el("div");
     text.append(el("strong", task.title));
-    text.append(el("small", task.id + " · " + task.status + (task.lead ? " · " + task.lead : "")));
+    const people = (task.members || []).join(", ") || "unassigned";
+    text.append(el("small", task.id + " · " + task.status + " · " + people));
     card.append(text);
     card.addEventListener("click", () => showDetail(task));
     cards.append(card);
@@ -280,10 +378,12 @@ function render(data) {
     ? "Your part is " + mine.id + " " + mine.title + " on " + mine.branch + "."
     : "You have no active part.";
   document.getElementById("finish").hidden = !mine;
-  const lead = mine && mine.lead === you;
+  const lead = Boolean(mine && mine.lead === you);
   document.getElementById("approach-label").hidden = !lead;
   document.getElementById("save-approach").hidden = !lead;
-  if (lead) document.getElementById("approach").value = mine.approach || "";
+  if (lead && document.activeElement !== document.getElementById("approach")) {
+    document.getElementById("approach").value = mine.approach || "";
+  }
 
   const channel = document.getElementById("channel");
   const previous = channel.value;
@@ -303,6 +403,7 @@ function render(data) {
     log.append(bubble);
   });
   log.scrollTop = log.scrollHeight;
+  showSession();
   requestAnimationFrame(drawLinks);
 }
 
@@ -314,14 +415,20 @@ function showDetail(task) {
   if (task.lead) box.append(el("p", "Lead " + task.lead));
   if ((task.members || []).length) box.append(el("p", "With " + task.members.join(", ")));
   if ((task.connects || []).length) box.append(el("p", "Connects to " + task.connects.join(", ")));
+  if (task.partitioned) box.append(el("p", "Partitioned section."));
   if (task.interface) box.append(el("p", task.interface));
   if (task.approach) box.append(el("p", "Approach: " + task.approach));
+  if (!signedIn()) {
+    box.append(el("p", "Log in on this computer to play this part."));
+    return;
+  }
   const mine = (task.members || []).includes(you);
+  const closed = task.partitioned && !mine && snapshot.conductor !== you;
   if (!mine && task.status !== "done") {
-    const button = el("button", task.status === "waiting" ? "Waiting for a finished run" : "Join this part");
+    const button = el("button", task.status === "waiting" ? "Waiting for a finished run" : closed ? "Partitioned" : "Join this part");
     button.type = "button";
-    button.disabled = task.status === "waiting";
-    button.addEventListener("click", () => act(() => api("POST", "/v1/help", { task: task.id })));
+    button.disabled = task.status === "waiting" || closed;
+    if (!button.disabled) button.addEventListener("click", () => act(() => api("POST", "/v1/help", { task: task.id })));
     box.append(button);
   }
 }
@@ -332,6 +439,7 @@ function drawLinks() {
   const bounds = board.getBoundingClientRect();
   svg.setAttribute("viewBox", "0 0 " + bounds.width + " " + bounds.height);
   svg.replaceChildren();
+  if (!bounds.width) return;
   const tasks = snapshot ? snapshot.tasks || [] : [];
   const byTitle = new Map(tasks.map((task) => [task.title.toLowerCase(), task.id]));
   tasks.forEach((task) => {
@@ -355,10 +463,49 @@ function drawLinks() {
   });
 }
 
+function forgetAgent() {
+  agentToken = "";
+  you = "";
+  sessionStorage.removeItem("team-link-agent-token");
+  sessionStorage.removeItem("team-link-player");
+}
+
 async function refresh() {
-  const data = await api("GET", "/v1/room");
-  presence.textContent = "Live";
-  render(data);
+  try {
+    const data = await api("GET", signedIn() ? "/v1/room" : "/v1/score");
+    if (signedIn() && !reclaiming) {
+      const mine = (data.snapshot.agents || []).find((player) => player.key === (data.snapshot.you || you));
+      if (mine && !mine.connected) {
+        reclaiming = true;
+        try {
+          const parts = mine.key.split("/");
+          const again = await api("POST", "/v1/join", { seat: parts[0], agent: parts[1], skills: mine.skills || [] });
+          agentToken = again.token;
+          you = again.agent;
+          sessionStorage.setItem("team-link-agent-token", agentToken);
+          sessionStorage.setItem("team-link-player", you);
+          presence.textContent = "Live";
+          render(again);
+          return;
+        } finally {
+          reclaiming = false;
+        }
+      }
+    }
+    presence.textContent = "Live";
+    render(data);
+  } catch (error) {
+    if (agentToken) {
+      forgetAgent();
+      const data = await api("GET", "/v1/score");
+      presence.textContent = "Live";
+      render(data);
+      document.getElementById("login-notice").textContent = error.message;
+      return;
+    }
+    presence.textContent = "Reconnecting";
+    throw error;
+  }
 }
 
 async function act(work) {
@@ -368,27 +515,45 @@ async function act(work) {
     await refresh();
   } catch (error) {
     notice(error.message);
+    const loginNotice = document.getElementById("login-notice");
+    if (!signedIn() && loginNotice) loginNotice.textContent = error.message;
   }
 }
 
-document.getElementById("enter").addEventListener("click", () => {
+function openRoom() {
   token = tokenFrom(document.getElementById("token-input").value || token);
+  document.getElementById("gate-notice").textContent = "";
+  if (!token) {
+    document.getElementById("gate-notice").textContent = "Paste the live link.";
+    return;
+  }
+  sessionStorage.setItem("team-link-token", token);
+  linkGate.hidden = true;
+  shell.hidden = false;
+  refresh().then(connect).catch((error) => {
+    linkGate.hidden = false;
+    shell.hidden = true;
+    document.getElementById("gate-notice").textContent = error.message;
+  });
+}
+
+document.getElementById("open-room").addEventListener("click", openRoom);
+document.getElementById("login").addEventListener("submit", (event) => {
+  event.preventDefault();
   const seat = document.getElementById("seat-input").value.trim();
   const agent = document.getElementById("agent-input").value.trim();
   const skills = document.getElementById("skill-input").value.split(",").map((item) => item.trim()).filter(Boolean);
-  document.getElementById("gate-notice").textContent = "";
+  document.getElementById("login-notice").textContent = "";
   api("POST", "/v1/join", { seat, agent, skills }).then((data) => {
     agentToken = data.token;
     you = data.agent;
     sessionStorage.setItem("team-link-token", token);
     sessionStorage.setItem("team-link-agent-token", agentToken);
     sessionStorage.setItem("team-link-player", you);
-    gate.hidden = true;
-    app.hidden = false;
     render(data);
     connect();
   }).catch((error) => {
-    document.getElementById("gate-notice").textContent = error.message;
+    document.getElementById("login-notice").textContent = error.message;
   });
 });
 
@@ -413,8 +578,15 @@ document.getElementById("save-approach").addEventListener("click", () => {
   if (!mine) return;
   act(() => api("POST", "/v1/approach", { task: mine.id, text: document.getElementById("approach").value }));
 });
+document.getElementById("leave").addEventListener("click", () => {
+  act(async () => {
+    await api("POST", "/v1/leave", {});
+    forgetAgent();
+  });
+});
 
 function connect() {
+  if (!token) return;
   if (window._link) window._link.close();
   const source = new EventSource("/v1/events?token=" + encodeURIComponent(token));
   window._link = source;
@@ -423,15 +595,11 @@ function connect() {
 }
 
 document.getElementById("token-input").value = token;
-if (token && agentToken) {
-  gate.hidden = true;
-  app.hidden = false;
-  refresh().then(connect).catch((error) => {
-    gate.hidden = false;
-    app.hidden = true;
-    document.getElementById("gate-notice").textContent = error.message;
-  });
-}
+if (token) openRoom();
+setInterval(() => {
+  if (!token || shell.hidden) return;
+  refresh().catch(() => { presence.textContent = "Reconnecting"; });
+}, 8000);
 </script>
 </body>
 </html>

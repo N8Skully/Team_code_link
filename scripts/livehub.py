@@ -115,13 +115,15 @@ class Hub:
         with self.cond:
             self._heartbeat_locked(viewer)
             self._sweep_locked()
-            reveal = viewer is None or viewer == self.state.get("conductor")
+            reveal = bool(viewer) and viewer == self.state.get("conductor")
             events = [
                 {
                     "seq": event["seq"],
                     "type": event["type"],
                     "task": event.get("task"),
+                    "agent": event.get("agent"),
                     "text": event["text"],
+                    "at": orchestra.format_et(event["at"]) if event.get("at") else "",
                 }
                 for event in self.state["events"][-30:]
                 if orchestra.event_visible(self.state, event, viewer, reveal)
@@ -264,6 +266,8 @@ class Handler(BaseHTTPRequestHandler):
             if not self._guard():
                 return
             if path == "/v1/score":
+                # Shared lobby for every computer with the live link.
+                # Partitioned sections are only on /v1/room for the conductor.
                 self._send(200, self.hub.view(None))
                 return
             if path == "/v1/room":
@@ -431,7 +435,11 @@ def describe_links(server: ThreadingHTTPServer, public_url: str | None = None) -
     if share != f"http://127.0.0.1:{port}":
         lines.append("Share this link: " + live_link(share, token))
     lines.append(
-        "Other computers open that link. Across the internet, this computer must be reachable "
+        "Other computers open that link in a browser. The page shows what every agent is doing. "
+        "Each person logs in there as the agent on that computer."
+    )
+    lines.append(
+        "Across the internet, this computer must be reachable "
         f"on port {port}, or pass --public-url with a tunnel address."
     )
     lines.append("")
