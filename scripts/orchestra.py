@@ -11,6 +11,7 @@ and follow that lead's approach.
 from __future__ import annotations
 
 import copy
+import os
 import re
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -134,6 +135,8 @@ def require_agent(state: dict, key: str) -> dict:
     agent = state["agents"].get(key)
     if not agent:
         raise OrchestraError(f"{key} is not in the room. Join before playing.")
+    if not agent.get("connected", True):
+        raise OrchestraError(f"{key} lost connection. Join again to pick up a part.")
     return agent
 
 
@@ -158,6 +161,20 @@ def _touch(agent: dict, now: str) -> None:
     agent["lastSeen"] = now
 
 
+def stale_after() -> int:
+    raw = os.environ.get("TEAM_LINK_STALE_SECONDS", "20")
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 20
+
+
+def _age_seconds(last_seen: str, now: str) -> float:
+    then = datetime.strptime(last_seen, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    current = datetime.strptime(now, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    return (current - then).total_seconds()
+
+
 def join(state: dict, seat: str, agent: str, skills: list[str] | None = None, now: str | None = None) -> dict:
     moment = now or utc_now()
     seat_name = normalize_name(seat, "Computer")
@@ -179,11 +196,13 @@ def join(state: dict, seat: str, agent: str, skills: list[str] | None = None, no
             "skills": normalize_skills(skills),
             "task": None,
             "lastSeen": moment,
+            "connected": True,
         }
         state["agents"][key] = player
         _event(state, "joined", f"{key} joined the orchestra.", at=moment, agent=key)
     else:
         player["skills"] = normalize_skills(skills)
+        player["connected"] = True
         _touch(player, moment)
         _event(state, "joined", f"{key} is back.", at=moment, agent=key)
     balance(state, at=moment)
@@ -470,7 +489,7 @@ def visible_messages(state: dict, key: str | None, reveal_all: bool = False) -> 
     return chosen
 
 
-def _step_off(state: dict, key: str, task_id: str, moment: str, leaving: bool) -> None:
+def _step_off(state: dict, key: str, task_id: str, moment: str, leaving: bool, dropped: bool = False) -> None:
     task = task_by_id(state, task_id)
     if key in task["members"]:
         task["members"].remove(key)
@@ -489,12 +508,51 @@ def _step_off(state: dict, key: str, task_id: str, moment: str, leaving: bool) -
                 task=task_id,
             )
     if task["status"] == "active" and not task["members"]:
-        task["status"] = "done"
         task["lead"] = None
-        _event(state, "done", f"{key} completed {task['title']}.", at=moment, agent=key, task=task_id)
+        if dropped:
+            task["status"] = "open"
+            _event(
+                state,
+                "waiting",
+                f"{task['title']} is waiting. {key} lost connection.",
+                at=moment,
+                agent=key,
+                task=task_id,
+            )
+        else:
+            task["status"] = "done"
+            _event(state, "done", f"{key} completed {task['title']}.", at=moment, agent=key, task=task_id)
     elif task["status"] == "active":
-        verb = "left" if leaving else "finished their share of"
+        if dropped:
+            verb = "lost connection during"
+        elif leaving:
+            verb = "left"
+        else:
+            verb = "finished their share of"
         _event(state, "stepped", f"{key} {verb} {task['title']}.", at=moment, agent=key, task=task_id)
+
+
+def sweep(state: dict, now: str | None = None, limit: int | None = None) -> list[str]:
+    """Release parts held by players who stopped answering."""
+    moment = now or utc_now()
+    window = stale_after() if limit is None else limit
+    lost: list[str] = []
+    for key in sorted(state["agents"]):
+        player = state["agents"][key]
+        if not player.get("connected", True):
+            continue
+        seen = player.get("lastSeen")
+        if not seen or _age_seconds(seen, moment) <= window:
+            continue
+        player["connected"] = False
+        task_id = player.get("task")
+        if task_id:
+            _step_off(state, key, task_id, moment, leaving=True, dropped=True)
+        _event(state, "lost", f"{key} lost connection.", at=moment, agent=key)
+        lost.append(key)
+    if lost:
+        balance(state, at=moment)
+    return lost
 
 
 def _become_lead(state: dict, task: dict, key: str, approach: str | None, moment: str) -> None:
@@ -540,12 +598,18 @@ def balance(state: dict, approaches: dict | None = None, avoid: dict | None = No
     avoid = avoid or {}
     free = _free_agents(state)
     open_tasks = [task for task in state["tasks"] if task["status"] == "open"]
-    for task in open_tasks:
-        if not free:
+    while free and open_tasks:
+        ranked = []
+        for task in open_tasks:
+            candidates = [key for key in free if avoid.get(key) != task["id"]] or list(free)
+            for key in candidates:
+                ranked.append((score(state, key, task), task["n"], key, task))
+        if not ranked:
             break
-        chosen = _best_agent(state, free, task, avoid)
-        _become_lead(state, task, chosen, approaches.get(chosen), moment)
-        free.remove(chosen)
+        _best, _order, key, task = sorted(ranked, key=lambda item: (-item[0], item[1], item[2]))[0]
+        _become_lead(state, task, key, approaches.get(key), moment)
+        free.remove(key)
+        open_tasks.remove(task)
     needy = [task for task in state["tasks"] if task["status"] == "active" and len(task["members"]) < 2]
     for key in list(free):
         pool = [task for task in needy if task["id"] != avoid.get(key)]
@@ -577,6 +641,8 @@ def _free_agents(state: dict) -> list[str]:
     free = []
     for key in sorted(state["agents"]):
         player = state["agents"][key]
+        if not player.get("connected", True):
+            continue
         task_id = player.get("task")
         if not task_id:
             free.append(key)
@@ -638,6 +704,7 @@ def public_state(state: dict, viewer: str | None) -> dict:
                 "skills": list(player["skills"]),
                 "task": player.get("task"),
                 "lastSeen": player.get("lastSeen"),
+                "connected": player.get("connected", True),
             }
         )
     return {
@@ -660,7 +727,13 @@ def render_view(state: dict, viewer: str | None) -> str:
     lines.append(f"Conductor: {snap['conductor'] or 'open'}")
     lines.append(f"Computers: {snap['seatCount']}/{MAX_SEATS}")
     if snap["agents"]:
-        lines.append("Players: " + ", ".join(player["key"] for player in snap["agents"]))
+        labels = []
+        for player in snap["agents"]:
+            if player.get("connected", True):
+                labels.append(player["key"])
+            else:
+                labels.append(f"{player['key']} (connection lost)")
+        lines.append("Players: " + ", ".join(labels))
     else:
         lines.append("Players: none yet")
     lines.append("")

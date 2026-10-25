@@ -98,6 +98,8 @@ python3 scripts/workspace.py say --text "Starting the form. I will edit src/logi
 python3 scripts/workspace.py say --task t1 --text "The field names are email and password."
 ```
 
+If a player goes silent, the room keeps their seat and lets the part go on without them. They join again to come back into the plan. A player who arrives after the plan has started is given a part that still needs someone.
+
 When your share is done:
 
 ```bash

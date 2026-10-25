@@ -26,7 +26,36 @@ class Hub:
         self.cond = threading.Condition()
         self.room_token = ""
         self.state = orchestra.empty_state()
+        self._closed = False
+        self._caller = threading.local()
         self._load()
+        self._sweeper = threading.Thread(target=self._sweep_loop, daemon=True)
+        self._sweeper.start()
+
+    def close(self) -> None:
+        self._closed = True
+
+    def _sweep_loop(self) -> None:
+        while not self._closed:
+            time.sleep(1)
+            with self.cond:
+                if self._closed:
+                    return
+                self._sweep_locked()
+
+    def _heartbeat_locked(self, viewer: str | None) -> None:
+        if not viewer:
+            return
+        player = self.state["agents"].get(viewer)
+        if player and player.get("connected", True):
+            player["lastSeen"] = orchestra.utc_now()
+
+    def _sweep_locked(self) -> None:
+        before = self.state["seq"]
+        orchestra.sweep(self.state)
+        if self.state["seq"] != before:
+            self._save()
+            self.cond.notify_all()
 
     def _load(self) -> None:
         token_path = self.data_dir / TOKEN_NAME
@@ -63,6 +92,8 @@ class Hub:
 
     def update(self, fn):
         with self.cond:
+            self._heartbeat_locked(getattr(self._caller, "viewer", None))
+            self._sweep_locked()
             result = fn(self.state)
             self._save()
             self.cond.notify_all()
@@ -70,6 +101,8 @@ class Hub:
 
     def view(self, viewer: str | None) -> dict:
         with self.cond:
+            self._heartbeat_locked(viewer)
+            self._sweep_locked()
             return {
                 "text": orchestra.render_view(self.state, viewer),
                 "snapshot": orchestra.public_state(self.state, viewer),
@@ -79,6 +112,8 @@ class Hub:
     def wait(self, after: int, viewer: str | None, reveal_all: bool, timeout: float) -> dict:
         deadline = time.monotonic() + timeout
         with self.cond:
+            self._heartbeat_locked(viewer)
+            self._sweep_locked()
             while True:
                 visible = [
                     event
@@ -218,61 +253,70 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, self._join(payload))
                 return
             viewer = self._viewer()
-            if not viewer:
-                raise orchestra.OrchestraError("Join the room before playing.")
-            if path == "/v1/leave":
-                self.hub.update(lambda state: orchestra.leave(state, viewer))
-            elif path == "/v1/conduct":
-                self.hub.update(lambda state: orchestra.conduct(state, viewer, successor=payload.get("player") or None))
-            elif path == "/v1/plan":
-                self.hub.update(lambda state: orchestra.publish_plan(state, viewer, payload))
-            elif path == "/v1/say":
-                self.hub.update(
-                    lambda state: orchestra.say(
-                        state,
-                        viewer,
-                        payload.get("text", ""),
-                        payload.get("task") or None,
-                        payload.get("files") or [],
-                    )
-                )
-            elif path == "/v1/finish":
-                self.hub.update(
-                    lambda state: orchestra.finish(
-                        state,
-                        viewer,
-                        payload.get("task") or None,
-                        payload.get("approach") or None,
-                    )
-                )
-            elif path == "/v1/help":
-                self.hub.update(lambda state: orchestra.help_on(state, viewer, payload.get("task", "")))
-            elif path == "/v1/partition":
-                self.hub.update(
-                    lambda state: orchestra.set_partition(
-                        state, viewer, payload.get("task", ""), bool(payload.get("on", True))
-                    )
-                )
-            elif path == "/v1/approach":
-                self.hub.update(
-                    lambda state: orchestra.set_approach(
-                        state, viewer, payload.get("task", ""), payload.get("text", "")
-                    )
-                )
-            elif path == "/v1/place":
-                self.hub.update(
-                    lambda state: orchestra.place(
-                        state, viewer, payload.get("player", ""), payload.get("task", "")
-                    )
-                )
-            else:
-                self._send(404, {"error": "Not found."})
-                return
-            self._send(200, self.hub.view(viewer))
+            self._caller_set(viewer)
+            try:
+                if not viewer:
+                    raise orchestra.OrchestraError("Join the room before playing.")
+                if not self._dispatch(path, viewer, payload):
+                    self._send(404, {"error": "Not found."})
+                    return
+                self._send(200, self.hub.view(viewer))
+            finally:
+                self._caller_set(None)
+            return
         except orchestra.OrchestraError as exc:
             self._send(400, {"error": str(exc)})
         except (BrokenPipeError, ConnectionResetError):
             return
+
+    def _caller_set(self, viewer: str | None) -> None:
+        self.hub._caller.viewer = viewer
+
+    def _dispatch(self, path: str, viewer: str, payload: dict) -> bool:
+        if path == "/v1/leave":
+            self.hub.update(lambda state: orchestra.leave(state, viewer))
+        elif path == "/v1/conduct":
+            self.hub.update(lambda state: orchestra.conduct(state, viewer, successor=payload.get("player") or None))
+        elif path == "/v1/plan":
+            self.hub.update(lambda state: orchestra.publish_plan(state, viewer, payload))
+        elif path == "/v1/say":
+            self.hub.update(
+                lambda state: orchestra.say(
+                    state,
+                    viewer,
+                    payload.get("text", ""),
+                    payload.get("task") or None,
+                    payload.get("files") or [],
+                )
+            )
+        elif path == "/v1/finish":
+            self.hub.update(
+                lambda state: orchestra.finish(
+                    state,
+                    viewer,
+                    payload.get("task") or None,
+                    payload.get("approach") or None,
+                )
+            )
+        elif path == "/v1/help":
+            self.hub.update(lambda state: orchestra.help_on(state, viewer, payload.get("task", "")))
+        elif path == "/v1/partition":
+            self.hub.update(
+                lambda state: orchestra.set_partition(
+                    state, viewer, payload.get("task", ""), bool(payload.get("on", True))
+                )
+            )
+        elif path == "/v1/approach":
+            self.hub.update(
+                lambda state: orchestra.set_approach(state, viewer, payload.get("task", ""), payload.get("text", ""))
+            )
+        elif path == "/v1/place":
+            self.hub.update(
+                lambda state: orchestra.place(state, viewer, payload.get("player", ""), payload.get("task", ""))
+            )
+        else:
+            return False
+        return True
 
     def _join(self, payload: dict) -> dict:
         seat = payload.get("seat") or payload.get("name") or ""
@@ -482,4 +526,5 @@ def serve_forever(host: str, port: int, data_dir: Path, public_url: str | None =
     except KeyboardInterrupt:
         print("\nThe live room stopped.", flush=True)
     finally:
+        server.hub.close()  # type: ignore[attr-defined]
         server.server_close()

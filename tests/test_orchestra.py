@@ -169,6 +169,35 @@ class OrchestraTests(unittest.TestCase):
         self.assertEqual(task_named(state, "Login form")["lead"], "shop/chatgpt")
         self.assertEqual(task_named(state, "Login form")["status"], "active")
 
+    def test_a_dropped_player_can_rejoin_and_a_new_player_can_enter(self) -> None:
+        state = orchestra.empty_state()
+        early = "2026-10-25T04:00:00Z"
+        later = "2026-10-25T04:00:30Z"
+        orchestra.join(state, "home", "claude", ["ui"], early)
+        orchestra.join(state, "office", "cursor", ["api"], early)
+        plan(
+            state,
+            "home/claude",
+            [
+                {"title": "Login form", "brief": "Draw the form", "skills": ["ui"]},
+                {"title": "Session API", "brief": "Own the session", "skills": ["api"]},
+            ],
+        )
+        state["agents"]["home/claude"]["lastSeen"] = later
+        lost = orchestra.sweep(state, later, limit=20)
+        self.assertEqual(lost, ["office/cursor"])
+        self.assertFalse(state["agents"]["office/cursor"]["connected"])
+        self.assertEqual(task_named(state, "Session API")["status"], "open")
+        self.assertIn("connection lost", orchestra.render_view(state, "home/claude"))
+        with self.assertRaises(orchestra.OrchestraError):
+            orchestra.say(state, "office/cursor", "still here", now=later)
+        orchestra.join(state, "office", "cursor", ["api"], later)
+        self.assertTrue(state["agents"]["office/cursor"]["connected"])
+        self.assertEqual(state["agents"]["office/cursor"]["task"], task_named(state, "Session API")["id"])
+        orchestra.join(state, "studio", "hermes", ["ui"], later)
+        self.assertIsNotNone(state["agents"]["studio/hermes"]["task"])
+        self.assertIn("Your part:", orchestra.render_view(state, "studio/hermes"))
+
     def test_only_the_conductor_publishes_the_plan(self) -> None:
         state = orchestra.empty_state()
         players(state, ("home", "claude", []), ("office", "cursor", []))
