@@ -244,7 +244,7 @@ def call_tool(repo: Path, name: str, arguments: dict) -> dict:
                 arguments.get("agent"),
                 [str(skill) for skill in skills],
                 repo,
-            )
+            ).get("text", "")
         elif name == "leave":
             text = liveclient.post("/v1/leave", {}, repo)
         elif name == "conduct":

@@ -13,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import codework
 import liveclient
 import livehub
 from orchestra import OrchestraError
@@ -46,6 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
     conduct.add_argument("--player", help="Player key, such as office/cursor")
     commands.add_parser("room", help="Read the live score")
     commands.add_parser("status", help="Read the live score")
+    commands.add_parser("sync", help="Pull and push the shared branch for your current part")
 
     plan = commands.add_parser("plan", help="Conductor: publish the group plan")
     plan.add_argument("--file", required=True, help="JSON plan with title, framework, and tasks")
@@ -108,28 +110,37 @@ def hub_dir(root: Path, override: str | None) -> Path:
     return root / ".team-link-hub"
 
 
-def checkout_seat(root: Path, name: str) -> str:
-    branch = f"seat/{name.strip().lower()}"
-    inside = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
-        check=False,
-        text=True,
-        capture_output=True,
-    )
-    if inside.returncode != 0 or inside.stdout.strip() != "true":
-        return ""
-    exists = subprocess.run(
-        ["git", "-C", str(root), "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
-        check=False,
-    )
-    if exists.returncode == 0:
-        command = ["git", "-C", str(root), "checkout", branch]
-    else:
-        command = ["git", "-C", str(root), "checkout", "-b", branch]
-    result = subprocess.run(command, check=False, text=True, capture_output=True)
-    if result.returncode != 0:
-        return "Code stays on the current branch until this checkout is clean."
-    return f"Code branch: {branch}"
+def require_clean(root: Path) -> None:
+    if codework.is_repo(root) and not codework.working_tree_clean(root):
+        raise OrchestraError("Commit or stash your changes before moving onto shared code.")
+
+
+def align_code(root: Path, payload: dict) -> list[str]:
+    task = codework.active_task(payload)
+    if not task:
+        return []
+    return [codework.sync_part(root, task["id"])]
+
+
+def return_finished(root: Path, before_seq: int, payload: dict) -> list[str]:
+    notes = []
+    for task_id in codework.finished_task_ids(before_seq, payload):
+        try:
+            notes.append(codework.reunite(root, task_id))
+        except OrchestraError as exc:
+            repaired = liveclient._request(root, "POST", "/v1/reopen", {"task": task_id})
+            codework.sync_part(root, task_id)
+            raise OrchestraError(f"{exc}\n{repaired.get('text', '')}") from exc
+    return notes
+
+
+def show(payload: dict, extra: list[str] | None = None) -> None:
+    text = payload.get("text") or ""
+    if text:
+        print(text)
+    for line in extra or []:
+        if line:
+            print(line)
 
 
 def follow(root: Path, after: int) -> int:
@@ -155,9 +166,8 @@ def main(argv: list[str] | None = None) -> int:
             print(liveclient.link_room(args.url, args.token, root))
             return 0
         if args.command == "join":
-            text = liveclient.join(args.name, args.agent, args.skill or [], root)
-            print(text)
-            print(checkout_seat(root, args.name))
+            payload = liveclient.join(args.name, args.agent, args.skill or [], root)
+            show(payload, align_code(root, payload))
             if args.start:
                 if shutil.which("agent") is None:
                     print(
@@ -175,26 +185,48 @@ def main(argv: list[str] | None = None) -> int:
         if args.command in {"room", "status"}:
             print(liveclient.room(root))
             return 0
+        if args.command == "sync":
+            current = liveclient._request(root, "GET", "/v1/room")
+            task = codework.active_task(current)
+            if not task:
+                raise OrchestraError("You have no active part to sync.")
+            print(codework.sync_part(root, task["id"]))
+            print(codework.push_part(root, task["id"]))
+            return 0
         if args.command == "conduct":
-            print(liveclient.post("/v1/conduct", {"player": args.player}, root))
+            show(liveclient._request(root, "POST", "/v1/conduct", {"player": args.player}))
             return 0
         if args.command == "plan":
             spec = json.loads(Path(args.file).read_text(encoding="utf-8"))
             if not isinstance(spec, dict):
                 raise OrchestraError("The plan file must be a JSON object.")
-            print(liveclient.post("/v1/plan", spec, root))
+            payload = liveclient._request(root, "POST", "/v1/plan", spec)
+            show(payload, align_code(root, payload))
             return 0
         if args.command == "say":
-            print(liveclient.post("/v1/say", {"text": message_text(args), "task": args.task, "files": args.file or []}, root))
+            show(liveclient._request(root, "POST", "/v1/say", {"text": message_text(args), "task": args.task, "files": args.file or []}))
             return 0
         if args.command == "leave":
-            print(liveclient.post("/v1/leave", {}, root))
+            show(liveclient._request(root, "POST", "/v1/leave", {}))
             return 0
         if args.command == "finish":
-            print(liveclient.post("/v1/finish", {"task": args.task, "approach": args.approach}, root))
+            require_clean(root)
+            before = liveclient._request(root, "GET", "/v1/room")
+            current = codework.active_task(before)
+            pushed = []
+            if current:
+                note = codework.push_part(root, current["id"])
+                if note:
+                    pushed.append(note)
+            payload = liveclient._request(root, "POST", "/v1/finish", {"task": args.task, "approach": args.approach})
+            notes = pushed + return_finished(root, int(before.get("seq") or 0), payload)
+            notes.extend(align_code(root, payload))
+            show(payload, notes)
             return 0
         if args.command == "help-on":
-            print(liveclient.post("/v1/help", {"task": args.task}, root))
+            require_clean(root)
+            payload = liveclient._request(root, "POST", "/v1/help", {"task": args.task})
+            show(payload, align_code(root, payload))
             return 0
         if args.command == "partition":
             print(liveclient.post("/v1/partition", {"task": args.task, "on": not args.off}, root))

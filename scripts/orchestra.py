@@ -429,6 +429,37 @@ def place(state: dict, conductor: str, player_key: str, task_id: str, now: str |
     _touch(state["agents"][player_key], moment)
 
 
+def reopen(state: dict, key: str, task_id: str, now: str | None = None) -> None:
+    """The part did not fit back onto main, so the same players keep working it."""
+    moment = now or utc_now()
+    require_agent(state, key)
+    task = task_by_id(state, task_id)
+    if task["status"] != "done":
+        raise OrchestraError(f"{task['title']} is still in progress.")
+    for other in state["tasks"]:
+        if other["id"] == task_id or key not in other["members"]:
+            continue
+        other["members"].remove(key)
+        if other["lead"] == key:
+            other["lead"] = other["members"][0] if other["members"] else None
+            if other["status"] == "active" and not other["members"]:
+                other["status"] = "open"
+                other["lead"] = None
+    task["status"] = "active"
+    task["lead"] = key
+    task["members"] = [key] + [member for member in task["members"] if member != key]
+    state["agents"][key]["task"] = task_id
+    _touch(state["agents"][key], moment)
+    _event(
+        state,
+        "reopen",
+        f"{task['title']} did not fit back onto main. {key} is repairing the seam on part/{task_id}.",
+        at=moment,
+        agent=key,
+        task=task_id,
+    )
+
+
 def help_on(state: dict, key: str, task_id: str, now: str | None = None) -> None:
     moment = now or utc_now()
     player = require_agent(state, key)
@@ -628,8 +659,6 @@ def balance(state: dict, approaches: dict | None = None, avoid: dict | None = No
             if key not in task["members"] and task["id"] != avoid.get(key)
         ]
         if not options:
-            options = [task for task in carrying if key not in task["members"]]
-        if not options:
             continue
         chosen = sorted(options, key=lambda task: (len(task["members"]), -score(state, key, task), task["n"]))[0]
         _join_part(state, chosen, key, moment, "helping")
@@ -691,6 +720,7 @@ def public_state(state: dict, viewer: str | None) -> dict:
             "interface": task["interface"] if heard else "",
             "brief": task["brief"] if heard else "",
             "approach": task["approach"] if heard else "",
+            "branch": f"part/{task['id']}",
         }
         tasks.append(entry)
     agents = []
@@ -752,6 +782,7 @@ def render_view(state: dict, viewer: str | None) -> str:
     if yours:
         role = "lead" if yours["lead"] == viewer else "with the lead"
         lines.append(f"Your part: {yours['id']} {yours['title']} ({role})")
+        lines.append(f"Code: part/{yours['id']}")
         if yours["approach"]:
             lines.append(f"Approach to follow: {yours['approach']}")
         if yours["connects"]:

@@ -154,9 +154,11 @@ mcp_servers:
 
 Point its MCP config at `python3 scripts/mcp_server.py` from this clone, or use the CLI commands above.
 
-## Code branches
+## One branch per part
 
-Join checks out `seat/<computer>` when the working tree is clean. `main` stays the shared line. Merge finished parts back to `main` when the section is done.
+Players on the same part share `part/<id>`. When you finish your part and join a teammate, your checkout moves onto their branch, so you edit the same files. `python3 scripts/workspace.py sync` pulls their latest commits and pushes yours.
+
+When the last player finishes a part, that branch returns to `main` only if the merge is clean. If the same lines changed on both sides, the part stays open and main is left untouched. Fix the seam on the part branch, then finish again.
 
 ## Optional Cursor worker
 

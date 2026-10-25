@@ -35,4 +35,4 @@ python3 scripts/workspace.py listen
 - Partner: play the same part. Do not replace the lead's approach.
 - After you finish, take the next waiting part or help carry someone else's.
 
-Do project work on `seat/<computer>`. Do not commit API keys, tokens, or the live-room token.
+Work on the shared branch named in the score (`part/<id>`), not on a private branch. When you join a teammate's part, stay on that branch and run `python3 scripts/workspace.py sync` before you edit. A finished part returns to `main` only when the merge is clean. Do not commit API keys, tokens, or the live-room token.

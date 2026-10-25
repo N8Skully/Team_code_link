@@ -103,9 +103,21 @@ class Hub:
         with self.cond:
             self._heartbeat_locked(viewer)
             self._sweep_locked()
+            reveal = viewer is None or viewer == self.state.get("conductor")
+            events = [
+                {
+                    "seq": event["seq"],
+                    "type": event["type"],
+                    "task": event.get("task"),
+                    "text": event["text"],
+                }
+                for event in self.state["events"][-30:]
+                if orchestra.event_visible(self.state, event, viewer, reveal)
+            ]
             return {
                 "text": orchestra.render_view(self.state, viewer),
                 "snapshot": orchestra.public_state(self.state, viewer),
+                "events": events,
                 "seq": self.state["seq"],
             }
 
@@ -314,6 +326,8 @@ class Handler(BaseHTTPRequestHandler):
             self.hub.update(
                 lambda state: orchestra.place(state, viewer, payload.get("player", ""), payload.get("task", ""))
             )
+        elif path == "/v1/reopen":
+            self.hub.update(lambda state: orchestra.reopen(state, viewer, payload.get("task", "")))
         else:
             return False
         return True

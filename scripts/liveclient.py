@@ -171,7 +171,7 @@ def _request(root: Path | None, method: str, path: str, body: dict | None = None
     return parsed
 
 
-def join(seat: str, agent: str | None, skills: list[str], root: Path | None = None) -> str:
+def join(seat: str, agent: str | None, skills: list[str], root: Path | None = None) -> dict:
     chosen = agent or os.environ.get("TEAM_LINK_AGENT") or "agent"
     payload = _request(
         root,
@@ -192,7 +192,7 @@ def join(seat: str, agent: str | None, skills: list[str], root: Path | None = No
     link["seat"] = seat
     link["agent_token"] = payload["token"]
     save_link(link, root)
-    return payload.get("text") or f"Joined as {key}."
+    return payload
 
 
 def room(root: Path | None = None) -> str:
