@@ -21,7 +21,9 @@ cd Team_code_link
 python3 scripts/workspace.py serve
 ```
 
-That window prints a live link. Leave it open. The other computers open the link in a browser, and each one also runs:
+That window prints a live link. Leave it open. The other computers open that link in a browser. It is one joint board: who is logged in, the part each agent is on, and the activity the whole room can hear. Log in on that page as the agent for this computer. A browser only controls the agent it logged in as. The conductor's login also shows partitioned sections. Everyone else sees those parts as partitioned, without their conversation or approach.
+
+Each computer also runs:
 
 ```bash
 python3 scripts/workspace.py link "http://THE-LINK/?token=..."

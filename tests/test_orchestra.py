@@ -142,7 +142,17 @@ class OrchestraTests(unittest.TestCase):
         self.assertIn("secret chord", home)
         self.assertIn("secret chord", studio)
         self.assertNotIn("secret chord", office)
-        self.assertIn("secret chord", orchestra.render_view(state, None))
+        lobby = orchestra.public_state(state, None)
+        form_lobby = next(task for task in lobby["tasks"] if task["id"] == form["id"])
+        self.assertEqual(form_lobby["approach"], "")
+        self.assertEqual(form_lobby["brief"], "")
+        self.assertEqual(form_lobby["lead"], "home/claude")
+        self.assertTrue(form_lobby["partitioned"])
+        self.assertFalse(any(message["text"] == "secret chord" for message in lobby["messages"]))
+        self.assertNotIn("secret chord", orchestra.render_view(state, None))
+        self.assertNotIn("Private draft", orchestra.render_view(state, None))
+        conductor = orchestra.public_state(state, "home/claude")
+        self.assertTrue(any(message["text"] == "secret chord" for message in conductor["messages"]))
         with self.assertRaises(orchestra.OrchestraError):
             orchestra.say(state, "office/cursor", "I can hear you", form["id"], now=NOW)
 

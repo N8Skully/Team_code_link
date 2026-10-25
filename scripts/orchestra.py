@@ -751,13 +751,15 @@ def _best_task(state: dict, key: str, tasks: list[dict], avoid: dict) -> dict:
 
 
 def public_state(state: dict, viewer: str | None) -> dict:
-    """Snapshot safe to send to one player, or the conductor view when viewer is None."""
-    conductor_view = viewer is None or viewer == state["conductor"]
+    """Snapshot for one signed-in player.
+
+    No viewer is the shared lobby: who is playing, which part, and the framework.
+    Partitioned conversation and approaches stay with that part and the conductor.
+    """
+    conductor_view = bool(viewer) and viewer == state["conductor"]
     tasks = []
     for task in state["tasks"]:
-        heard = can_hear(state, viewer, task) if viewer else True
-        if conductor_view:
-            heard = True
+        heard = conductor_view or can_hear(state, viewer, task)
         entry = {
             "id": task["id"],
             "title": task["title"],

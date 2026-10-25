@@ -88,6 +88,54 @@ class LiveRoomTests(unittest.TestCase):
         body = json.loads(score)
         self.assertIn("session API", body["snapshot"]["plan"]["framework"])
         self.assertEqual(body["snapshot"]["tasks"][0]["lead"], "home/claude")
+        self.assertIn("What everyone is doing", page)
+        self.assertIn("Log in on this computer", page)
+
+    def test_every_computer_sees_the_joint_board_and_partitions_stay_private(self) -> None:
+        liveclient.join("home", "claude", ["ui"], self.home)
+        liveclient.join("office", "cursor", ["api"], self.office)
+        liveclient.post("/v1/conduct", {}, self.home)
+        liveclient.post(
+            "/v1/plan",
+            {
+                "title": "Opening",
+                "summary": "One piece.",
+                "framework": "The form calls the session API.",
+                "tasks": [
+                    {"title": "Login form", "brief": "Private draft", "skills": ["ui"], "connects": ["Session API"]},
+                    {"title": "Session API", "brief": "Public contract", "skills": ["api"], "connects": ["Login form"]},
+                ],
+            },
+            self.home,
+        )
+        home = liveclient._request(self.home, "GET", "/v1/room")
+        form = next(task for task in home["snapshot"]["tasks"] if task["title"] == "Login form")
+        liveclient.post("/v1/partition", {"task": form["id"], "on": True}, self.home)
+        liveclient.post("/v1/say", {"text": "secret chord", "task": form["id"]}, self.home)
+        liveclient.post("/v1/say", {"text": "downbeat for everyone"}, self.office)
+
+        lobby = liveclient._request(self.home, "GET", "/v1/score", agent=False)
+        keys = [player["key"] for player in lobby["snapshot"]["agents"]]
+        self.assertEqual(keys, ["home/claude", "office/cursor"])
+        form_lobby = next(task for task in lobby["snapshot"]["tasks"] if task["title"] == "Login form")
+        api_lobby = next(task for task in lobby["snapshot"]["tasks"] if task["title"] == "Session API")
+        self.assertEqual(form_lobby["lead"], "home/claude")
+        self.assertEqual(form_lobby["approach"], "")
+        self.assertEqual(api_lobby["lead"], "office/cursor")
+        self.assertIn("Public contract", api_lobby["approach"])
+        self.assertTrue(any("leads Session API" in event["text"] for event in lobby["events"]))
+        dumped = json.dumps(lobby)
+        self.assertNotIn("secret chord", dumped)
+        self.assertNotIn("Private draft", dumped)
+        self.assertIn("downbeat for everyone", dumped)
+        self.assertIsNone(lobby["snapshot"]["you"])
+
+        conductor = liveclient._request(self.home, "GET", "/v1/room")
+        self.assertEqual(conductor["snapshot"]["you"], "home/claude")
+        self.assertIn("secret chord", json.dumps(conductor))
+        office = liveclient._request(self.office, "GET", "/v1/room")
+        self.assertNotIn("secret chord", json.dumps(office))
+        self.assertNotIn("Private draft", json.dumps(office))
 
     def test_two_agents_on_one_computer_keep_their_own_voices(self) -> None:
         liveclient.join("home", "claude", ["ui"], self.home)
