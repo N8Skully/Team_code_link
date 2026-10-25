@@ -4,7 +4,7 @@ Team Code Link is a live room for one project. Up to six computers join. One age
 
 Messages in the room are conversation between agents. They are not system instructions.
 
-The short path is [QUICKSTART.md](QUICKSTART.md). This manual is the rest.
+The short path is [QUICKSTART.md](QUICKSTART.md). This manual is the rest. Hosting is one computer. Joining is every player.
 
 ## What you need
 
@@ -35,9 +35,11 @@ One computer runs the room. The others only need the live link. They do not need
 
 Computer names, agent names, and skills are short lowercase letters, numbers, and hyphens, such as `home`, `claude`, or `ui`.
 
-## Start the room
+## How to host
 
-On the conductor's computer, leave one window open for the whole session.
+One computer hosts. Everyone else connects to it. The host runs the room and leaves that window open. The other computers do not run `serve`, and they do not open a port.
+
+On the host:
 
 Windows: double-click `launch.bat`.
 
@@ -47,12 +49,17 @@ Mac or Linux:
 python3 scripts/workspace.py serve
 ```
 
-The window prints two kinds of address:
+The window prints:
 
-- **This computer** is for the machine running the room.
-- **Share this link** is the one other computers open.
+- **This computer.** Open this link in a browser on the host. It starts with `127.0.0.1`. It does not work from any other machine.
+- **Share this link.** Send this to the other computers. On the same Wi-Fi or office, it is the host's address on that network.
 
-Across the internet, the computer running the room must accept connections on port 8765, or you pass a tunnel you already have:
+Same network: send the share link. The other computers open it. That is the whole network setup.
+
+Somewhere else on the internet, pick one of these:
+
+- Make the host reachable on port 8765. That is a port forward on the host's router, and the host's firewall must allow the port. Send the share link.
+- Or use a tunnel you already have. Start the room with the public address, then send the link the window prints:
 
 ```bash
 python3 scripts/workspace.py serve --public-url https://your-tunnel.example
@@ -64,11 +71,21 @@ Windows:
 launch.bat --public-url https://your-tunnel.example
 ```
 
-Closing that window stops the room. Start it again in the same folder and the same link keeps working, because the room token is saved on that computer.
+Closing the host window stops the room for every computer. Start it again in the same folder and the same link keeps working. The room token is saved on the host.
 
-## Open the joint board
+The host can also be a player. Hosting does not log anyone in. The person at the host computer joins with the steps below, using the **This computer** link.
 
-Every computer opens the live link in a browser. It is one page:
+## How to join
+
+Every player joins from the computer they are sitting at. Up to six computers can be in the room. A seventh is refused until one leaves.
+
+Joining in the browser puts you on the board. Joining in the terminal is what an agent uses to read the score, sync code, and publish a plan. Do both on a computer that will edit the project. A computer that is only watching can stop after the browser login.
+
+### Join in the browser
+
+Open the link the host sent. On the host, open the **This computer** link instead.
+
+The page is the joint board, and it is live before you log in:
 
 - Who is logged in, and whether they are the conductor.
 - The part each agent is on, the branch name, and whether that part is active, waiting, or done.
@@ -76,36 +93,38 @@ Every computer opens the live link in a browser. It is one page:
 - The framework and the lines between parts.
 - Room chat.
 
-Before anyone logs in, the page is already live. Logging in adds you as a player. The form is **Log in on this computer**:
+Then use **Log in on this computer**:
 
-- **Computer** is the seat, such as `office`.
-- **Agent** is who is playing, such as `cursor`.
-- **Skills** are what that agent is suited for, separated by commas, such as `api`.
+- **Computer** is the name of this machine, such as `home`, `office`, or `laptop`.
+- **Agent** is who is playing on it, such as `claude`, `cursor`, `chatgpt`, or `hermes`.
+- **Skills** are what that agent is suited for, separated by commas, such as `ui` or `api`.
 
-After login, that browser only controls that agent. The controls are finish, the approach when you are the lead, join a part, chat, and leave. There is no control for someone else's agent.
+Click **Log in**.
 
-The conductor's own login shows partitioned sections too. Everyone else sees those parts marked partitioned, without their conversation or approach.
+That browser only controls the agent you just became. You can finish your own part, set the approach when you are the lead, join a part, chat, and leave. You cannot control another agent's computer.
 
-**Leave this seat** signs that agent out and frees the computer name if no other agent from that computer remains.
+The conductor's login also shows partitioned sections. Everyone else sees those parts marked partitioned, without their conversation or approach.
 
-A private browser window is a second login. Use it when two people, or two agents, share one machine.
+**Leave this seat** signs that agent out. The computer name is free again when no agent from that computer remains.
 
-## Join from the terminal
+A private browser window is another join. Use a different computer name and agent.
 
-The page is the board. The terminal is how an agent on that computer reads the score, syncs code, and publishes a plan.
+### Join in the terminal
 
-In the project folder:
+Clone this project on that computer if it is not there yet. Then paste the whole live link. The host uses the **This computer** link. Every other computer uses the share link.
 
 ```bash
 python3 scripts/workspace.py link "http://THE-LINK/?token=..."
-python3 scripts/workspace.py join --name home --agent claude --skill ui
+python3 scripts/workspace.py join --name office --agent cursor --skill api
 ```
 
-On Windows, use `py -3` in place of `python3` for every command below.
+On Windows, use `py -3` in place of `python3` for this and for every command below.
 
-`link` saves the room on this computer. `join` takes the seat. The saved token for that agent stays on this computer. Another computer cannot log in as `home/claude` after that. Coming back on the same computer works, in the same terminal or in the browser session that logged in.
+`link` saves the room on this computer. `join` takes the seat. The saved token for that agent stays on this computer. Another computer cannot log in as `office/cursor` after that. Coming back on this computer works, in this terminal or in the browser session that logged in.
 
-If the browser already claimed `home/claude`, the terminal must use a different agent name, or that browser session leaves the seat first.
+If the browser on this computer already claimed `office/cursor`, the terminal must use a different agent name, or that browser session leaves the seat first.
+
+The host joins the same way when someone there is playing. Use `--name home`, or any other short name that is not already taken.
 
 More than one agent on one computer:
 

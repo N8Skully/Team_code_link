@@ -1,17 +1,19 @@
 # Quick start
 
-Team Code Link is one live room for up to six computers. One agent is the conductor. The others play the parts. This page gets the room open. The full guide is [HOW-TO.md](HOW-TO.md).
+One computer hosts the room. Every computer that plays joins it, including the host. The full guide is [HOW-TO.md](HOW-TO.md).
 
-You need Python 3.9 or newer and this project:
+You need Python 3.9 or newer.
 
 ```bash
 git clone https://github.com/N8Skully/Team_code_link.git
 cd Team_code_link
 ```
 
-## 1. Start the room
+## How to host
 
-On Windows, double-click `launch.bat` in this folder.
+Do this on one computer only. That computer is the host. Leave its window open for the whole session. Closing it stops the room for everyone.
+
+On Windows, double-click `launch.bat`.
 
 On Mac or Linux:
 
@@ -19,27 +21,71 @@ On Mac or Linux:
 python3 scripts/workspace.py serve
 ```
 
-Leave that window open. It prints a live link. That link is the room.
+The window prints the links:
 
-On the same network, share the link the window prints. Across the internet, this computer must be reachable on port 8765, or start it with your tunnel address:
+- **This computer** works only on the host. Open it in a browser on that machine.
+- **Share this link** is what you send to the other computers.
+
+People on the same Wi-Fi or office open the share link. No extra setup.
+
+People somewhere else on the internet need the host reachable on port 8765, or a tunnel you already have. Start the room with that public address and send the link it prints:
 
 ```bash
 python3 scripts/workspace.py serve --public-url https://your-tunnel.example
 ```
 
-On Windows that is `launch.bat --public-url https://your-tunnel.example`.
+On Windows:
 
-## 2. Put the conductor in the room
+```bat
+launch.bat --public-url https://your-tunnel.example
+```
 
-Open a second terminal in this same folder. Paste the live link from the first window.
+Do not send the `127.0.0.1` link to another computer. That address is only the host.
+
+Start the room again in the same folder later and the same link still works.
+
+The host does not have to play. Hosting is just this window. If someone on the host computer is also an agent, they join in the next section like everyone else.
+
+## How to join
+
+Each player joins from their own computer. A browser login only controls that one agent.
+
+### Join in the browser
+
+1. Open the link the host sent. On the host itself, open the **This computer** link.
+2. The page shows who is already playing. You can watch before you log in.
+3. Fill in **Log in on this computer**:
+   - **Computer** is this machine, such as `home`, `office`, or `laptop`.
+   - **Agent** is who is playing, such as `claude`, `cursor`, `chatgpt`, or `hermes`.
+   - **Skills** are what they are good at, such as `ui` or `api`.
+4. Click **Log in**.
+
+A second computer might use `office`, `cursor`, and `api`. The first might use `home`, `claude`, and `ui`.
+
+To join twice from one PC, open a private window and log in with a different computer name and agent.
+
+### Join in the terminal
+
+Do this on every computer that will edit the project or run an agent. Clone the repo there first, then paste the whole live link:
 
 ```bash
 python3 scripts/workspace.py link "http://THE-LINK/?token=..."
-python3 scripts/workspace.py join --name home --agent claude --skill ui
-python3 scripts/workspace.py conduct
+python3 scripts/workspace.py join --name office --agent cursor --skill api
 ```
 
 On Windows, use `py -3` instead of `python3`.
+
+`link` saves the room on that computer. `join` takes the seat. Up to six computers can be in the room.
+
+If the browser on that computer already logged in as `office/cursor`, the terminal cannot take that same agent. Leave the seat on the page first, or use a different agent name.
+
+## Publish a plan
+
+On the conductor's computer, after that computer has joined in the terminal:
+
+```bash
+python3 scripts/workspace.py conduct
+```
 
 Save this as `plan.json`:
 
@@ -67,30 +113,14 @@ Save this as `plan.json`:
 
 ```bash
 python3 scripts/workspace.py plan --file plan.json
+python3 scripts/workspace.py room
 ```
 
-## 3. Open the joint board
+Reload the board. Players show up on the parts that match their skills.
 
-Open the live link in a browser. The page shows who is logged in, the part each agent is on, and the activity the whole room can hear. You should see `home/claude` leading the Login form.
-
-## 4. Log in from another computer
-
-On the other computer, open the same link. Log in on the page:
-
-- Computer: `office`
-- Agent: `cursor`
-- Skills: `api`
-
-That browser only controls `office/cursor`. Send a chat message from it. The first page shows the new agent and the message.
-
-To try this on one computer, open a private browser window and log in there as `office`.
-
-## 5. Play the part
-
-On the computer that will edit the code, after `link` and `join`:
+When you are ready to edit code:
 
 ```bash
-python3 scripts/workspace.py room
 python3 scripts/workspace.py sync
 python3 scripts/workspace.py say --text "Starting my part."
 ```
@@ -101,6 +131,4 @@ When the work is committed and the folder is clean:
 python3 scripts/workspace.py finish --approach "Document the seam in one page."
 ```
 
-`room` tells you your part and the branch, such as `part/t1`. `sync` pulls that branch and pushes your commits. `finish` hands you the next part, or puts you with a teammate.
-
-Next: [HOW-TO.md](HOW-TO.md) for the board, partitioned sections, Claude, ChatGPT, Cursor, Hermes, and what to do when someone drops.
+Next: [How to host](HOW-TO.md#how-to-host) and [How to join](HOW-TO.md#how-to-join) in the full manual.

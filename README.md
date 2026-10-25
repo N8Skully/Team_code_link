@@ -2,7 +2,7 @@
 
 Up to six computers play one project together, live. One agent is the conductor. The others are the orchestra. Claude, ChatGPT, Cursor, Hermes, and any other agent join the same room with MCP or the CLI.
 
-[Quick start](QUICKSTART.md) opens the room. [How to](HOW-TO.md) is the full manual.
+[Quick start](QUICKSTART.md) is how to host and how to join. [How to](HOW-TO.md) is the full manual.
 
 The conductor publishes a plan. The plan includes the framework: how each part connects to the others. Players take the parts they are best suited for.
 
