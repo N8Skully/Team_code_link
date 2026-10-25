@@ -177,6 +177,12 @@ def live_link(base: str, token: str) -> str:
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.0"
 
+    def handle(self) -> None:
+        try:
+            super().handle()
+        except ConnectionError:
+            self.close_connection = True
+
     def log_message(self, fmt: str, *args) -> None:
         if os.environ.get("TEAM_LINK_DEBUG"):
             super().log_message(fmt, *args)
@@ -289,7 +295,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {"error": "Not found."})
         except orchestra.OrchestraError as exc:
             self._send(400, {"error": str(exc)})
-        except (BrokenPipeError, ConnectionResetError):
+        except ConnectionError:
             return
 
     def do_POST(self) -> None:  # noqa: N802
@@ -300,6 +306,13 @@ class Handler(BaseHTTPRequestHandler):
             payload = self._read_json()
             if path == "/v1/join":
                 self._send(200, self._join(payload))
+                return
+            if path == "/v1/remove":
+                player = str(payload.get("player") or "").strip()
+                if not player:
+                    raise orchestra.OrchestraError("Name the player to remove, such as home/cursor.")
+                self.hub.update(lambda state: orchestra.leave(state, player, removed=True))
+                self._send(200, self.hub.view(self._viewer()))
                 return
             viewer = self._viewer()
             self._caller_set(viewer)
@@ -315,7 +328,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         except orchestra.OrchestraError as exc:
             self._send(400, {"error": str(exc)})
-        except (BrokenPipeError, ConnectionResetError):
+        except ConnectionError:
             return
 
     def _caller_set(self, viewer: str | None) -> None:
@@ -398,23 +411,29 @@ class Handler(BaseHTTPRequestHandler):
         return viewed
 
     def _stream(self) -> None:
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream")
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "close")
-        self.end_headers()
-        after = int(self._query().get("after", "0") or "0")
-        self.wfile.write(b": live\n\n")
-        self.wfile.flush()
-        while True:
-            payload = self.hub.wait(after, None, True, 15)
-            after = payload["seq"]
-            if payload["events"]:
-                data = json.dumps({"seq": after})
-                self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
-            else:
-                self.wfile.write(b": keep\n\n")
+        self.protocol_version = "HTTP/1.1"
+        self.close_connection = False
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+            after = int(self._query().get("after", "0") or "0")
+            self.wfile.write(b": live\n\n")
             self.wfile.flush()
+            while True:
+                payload = self.hub.wait(after, None, True, 15)
+                after = payload["seq"]
+                if payload["events"]:
+                    data = json.dumps({"seq": after})
+                    self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                else:
+                    self.wfile.write(b": keep\n\n")
+                self.wfile.flush()
+        except ConnectionError:
+            self.close_connection = True
+            return
 
 
 def make_server(host: str, port: int, data_dir: Path) -> ThreadingHTTPServer:
