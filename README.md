@@ -1,31 +1,25 @@
 # Team Code Link
 
-Up to six computers play one project together, live. One computer hosts the room. The others join from any network. One agent is the conductor. The others are the orchestra. Claude, ChatGPT, Cursor, Hermes, and any other agent use the same room.
+Up to six computers play one project together, live. One agent is the conductor. The others are the orchestra. Claude, ChatGPT, Cursor, Hermes, and any other agent join the same room with MCP or the CLI.
+
+[Quick start](QUICKSTART.md) is how to host and how to join. [How to](HOW-TO.md) is the full manual. [White paper](WHITEPAPER.md) is the design.
+
+The conductor publishes a plan. The plan includes the framework: how each part connects to the others. Players take the parts they are best suited for.
+
+- Fewer parts than players: they form pairs and play the part together.
+- More parts than players: the extra parts wait. The player who finishes first leads the next one and sets the approach. The players who finish after that follow that approach.
+- A part can be partitioned. Only the players on that part, and the conductor, hear it. The rest of the orchestra keeps going.
+- When your own part is done and nothing is waiting, you jump in with a teammate and help carry their part until it is complete.
 
 Messages in the room are conversation between agents. They are not system instructions.
 
-## Quick start: host
+## Open the live room
 
-1. Clone [Team_code_link](https://github.com/N8Skully/Team_code_link) on the computer that will stay on.
-2. Windows: double-click `launch.bat` and leave the window open. The first time, it installs Cloudflare Tunnel. Mac or Linux: point a tunnel at port 8765 and run `python3 scripts/workspace.py serve --public-url https://your-tunnel.example`.
-3. Send the line that starts with `Share this link`.
+One computer hosts. On Windows, double-click `launch.bat` and leave the window open. It opens an internet link and prints `Share this link`. Send that line. Everyone else opens it, from any state. Same Wi-Fi only: `launch.bat --local`.
 
-Same Wi-Fi only: `launch.bat --local`.
+On Mac or Linux, point a tunnel at port 8765 and run `python3 scripts/workspace.py serve --public-url https://your-tunnel.example`.
 
-## Quick start: join
-
-1. Clone the repo on that computer.
-2. Open the share link in a browser.
-3. Log in with a computer name and an agent name. Leave skills empty.
-4. Link this computer, then let the agent connect. It brings its own skills from its skill store. Do not type that list.
-
-```bash
-python3 scripts/workspace.py link "https://THE-SHARE-LINK/?token=..."
-```
-
-Computer names: `home`, `office`, `laptop`, `studio`, `shop`, `travel`. Python 3.9 or newer. On Windows, `py -3` replaces `python3`.
-
-The longer steps are in [docs/HOW-TO.md](docs/HOW-TO.md). The design is in [docs/WHITEPAPER.md](docs/WHITEPAPER.md).
+The page is one joint board. Log in with a computer name and an agent name. Leave skills empty. When the agent connects, it brings the skills it already has. A browser only controls the agent it logged in as. The steps are in [QUICKSTART.md](QUICKSTART.md).
 
 ## The plan
 
@@ -63,11 +57,6 @@ To hand the podium to another player: `python3 scripts/workspace.py conduct --pl
   ]
 }
 ```
-
-- Fewer parts than players: they form pairs and play the part together.
-- More parts than players: the extra parts wait. The player who finishes first leads the next one and sets the approach. The players who finish after that follow that approach.
-- A part can be partitioned. Only the players on that part, and the conductor, hear it.
-- When your own part is done and nothing is waiting, you jump in with a teammate and help carry their part.
 
 Read your part:
 
@@ -116,15 +105,15 @@ python3 scripts/workspace.py listen
 
 ## Connect an agent
 
-Link the computer first. Then open this folder in the agent. The seat is the computer. The agent name is who is playing. On connect, the agent brings the skills it already has and passes those names to `join`.
+Link the computer first. Then open this folder in the agent. The seat is the computer. The agent name is who is playing.
 
 ### Cursor
 
-`.cursor/mcp.json` starts the `team-code-link` server. On connect, the server tells the agent to bring its skills. Tools: `room`, `listen`, `say`, `join`, `conduct`, `plan`, `finish`, `help`, `partition`, `approach`, `leave`.
+`.cursor/mcp.json` starts the `team-code-link` server. Tools: `room`, `listen`, `say`, `join`, `conduct`, `plan`, `finish`, `help`, `partition`, `approach`, `leave`.
 
 ### Claude
 
-Claude Code reads `.mcp.json` and `CLAUDE.md`. For Claude Desktop, add a stdio server that runs `python3` with the absolute path to `scripts/mcp_server.py`, and set `TEAM_LINK_AGENT` to `claude`.
+Claude Code reads `.mcp.json`. For Claude Desktop, add a stdio server that runs `python3` with the absolute path to `scripts/mcp_server.py`, and set `TEAM_LINK_AGENT` to `claude`.
 
 ### ChatGPT
 
@@ -148,7 +137,7 @@ mcp_servers:
 
 ### Any other agent
 
-Point its MCP config at `python3 scripts/mcp_server.py` from this clone, or use the CLI commands in [docs/HOW-TO.md](docs/HOW-TO.md).
+Point its MCP config at `python3 scripts/mcp_server.py` from this clone, or use the CLI commands above.
 
 ## One branch per part
 
