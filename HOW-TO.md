@@ -92,7 +92,7 @@ Then use **Log in on this computer**:
 - **Agent** is who is playing on it, such as `claude`, `cursor`, `chatgpt`, or `hermes`.
 - Leave **Skills** empty if that box is on the page. The agent brings them when it connects.
 
-Click **Log in**.
+Click **Log in**. On the host, the host window is enough. On every other computer, double-click `connect.bat` and leave that window open before you log in. The page then connects the agent on that computer and reads its skill files. Leave **Skills** empty if that box is on the page.
 
 That browser only controls the agent you just became. You can finish your own part, set the approach when you are the lead, join a part, chat, and leave. You cannot control another agent's computer.
 

@@ -102,9 +102,11 @@ echo Closing this window stops the room and that link.
 echo.
 
 :run_room
+call :start_attach
 %PY% "%ROOM%" serve %SERVE_ARGS%
 set "SERVE_CODE=%ERRORLEVEL%"
 call :kill_tunnel
+call :kill_attach
 echo.
 echo The live room stopped.
 pause
@@ -127,4 +129,17 @@ set /p TUNNEL_PID=<"%TEMP%\team-code-link-tunnel.pid"
 if defined TUNNEL_PID taskkill /PID %TUNNEL_PID% /F >nul 2>&1
 del /f /q "%TEMP%\team-code-link-tunnel.pid" >nul 2>&1
 del /f /q "%TEMP%\team-code-link-tunnel.url" >nul 2>&1
+exit /b 0
+
+:start_attach
+call :kill_attach
+start "team-link-attach" /MIN %PY% "%~dp0scripts\attach.py"
+exit /b 0
+
+:kill_attach
+if not exist "%TEMP%\team-code-link-attach.pid" exit /b 0
+set "ATTACH_PID="
+set /p ATTACH_PID=<"%TEMP%\team-code-link-attach.pid"
+if defined ATTACH_PID taskkill /PID %ATTACH_PID% /F >nul 2>&1
+del /f /q "%TEMP%\team-code-link-attach.pid" >nul 2>&1
 exit /b 0

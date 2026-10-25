@@ -196,7 +196,7 @@
         <img class="corner br" src="/assets/trim-corner.png" alt="">
         <h2 id="session-title">This computer</h2>
         <form id="login">
-          <p class="hint">Log in on this computer as your agent. This screen only controls that agent. A taken seat has Remove on its card.</p>
+          <p class="hint">Log in on this computer as your agent. On the host, that also connects the agent. On another computer, double-click connect.bat first and leave that window open.</p>
           <div class="login-grid">
             <label>Computer<input id="seat-input" placeholder="e.g. home" autocomplete="off"></label>
             <label>Agent<input id="agent-input" placeholder="e.g. claude" autocomplete="off"></label>
@@ -568,10 +568,29 @@ document.getElementById("login").addEventListener("submit", (event) => {
     sessionStorage.setItem("team-link-player", you);
     render(data);
     connect();
+    connectAgentHere(seat, agent);
   }).catch((error) => {
     document.getElementById("login-notice").textContent = error.message;
   });
 });
+
+function connectAgentHere(seat, agent) {
+  const url = location.origin + "/?token=" + encodeURIComponent(token);
+  fetch("http://127.0.0.1:8770/attach", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, seat, agent, agentToken, skills: [] })
+  }).then(async (response) => {
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "This computer did not connect the agent.");
+    const names = (data.skills || []).join(", ");
+    document.getElementById("notice").textContent = names
+      ? "The agent on this computer is connected. Skills: " + names + "."
+      : "The agent on this computer is connected.";
+  }).catch(() => {
+    document.getElementById("notice").textContent = "Logged in on the board. On this computer, double-click connect.bat, leave that window open, and log in again.";
+  });
+}
 
 document.getElementById("composer").addEventListener("submit", (event) => {
   event.preventDefault();

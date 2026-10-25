@@ -44,7 +44,7 @@ Each player joins from their own computer. A browser login only controls that on
    - **Computer** is this machine, such as `home`, `office`, or `laptop`.
    - **Agent** is who is playing, such as `claude`, `cursor`, `chatgpt`, or `hermes`.
    - Leave **Skills** empty if that box is on the page.
-4. Click **Log in**.
+4. Click **Log in**. On the host, leave the host window open. On another computer, double-click `connect.bat` first and leave that window open. Logging in then connects the agent on that computer. It reads the skills that computer already has. Leave **Skills** empty if that box is on the page.
 
 When the agent connects, it reads the skills it already has and joins with those names. Do not type that list. A `SKILL.md` file uses the name in its frontmatter, or the folder name. Each name is lowercase letters, numbers, and hyphens, at most 22 characters.
 
