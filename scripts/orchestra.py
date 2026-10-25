@@ -222,7 +222,9 @@ def join(state: dict, seat: str, agent: str, skills: list[str] | None = None, no
             f"{key} is already claimed on its own computer. Another computer cannot take it over."
         )
     else:
-        player["skills"] = normalize_skills(skills)
+        incoming = normalize_skills(skills)
+        if incoming:
+            player["skills"] = incoming
         player["connected"] = True
         _touch(player, moment)
         _event(state, "joined", f"{key} is back.", at=moment, agent=key)

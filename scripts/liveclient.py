@@ -135,11 +135,13 @@ def link_room(raw: str, token: str | None = None, root: Path | None = None) -> s
     return f"Linked to {base}"
 
 
-def _request(root: Path | None, method: str, path: str, body: dict | None = None, timeout: float = 30, agent: bool = True) -> dict:
+def _request(root: Path | None, method: str, path: str, body: dict | None = None, timeout: float = 30, agent: bool = True, token: str | None = None) -> dict:
     link = load_link(root)
     url = link["url"].rstrip("/") + path
     headers = {"Authorization": f"Bearer {link['room_token']}", "Accept": "application/json"}
-    if agent:
+    if token:
+        headers["X-Agent-Token"] = token
+    elif agent:
         player = select_player(link)
         if player and player.get("token"):
             headers["X-Agent-Token"] = player["token"]
@@ -179,6 +181,33 @@ def join(seat: str, agent: str | None, skills: list[str], root: Path | None = No
         "/v1/join",
         {"seat": seat, "agent": chosen, "skills": skills},
         agent=False,
+    )
+    link = load_link(root)
+    key = payload["agent"]
+    agent_name = key.split("/", 1)[1]
+    roster = players(link)
+    roster[key] = {"token": payload["token"], "key": key, "agent": agent_name, "seat": seat}
+    link["players"] = roster
+    link["active"] = key
+    link["player"] = key
+    link["agent"] = agent_name
+    link["seat"] = seat
+    link["agent_token"] = payload["token"]
+    save_link(link, root)
+    return payload
+
+
+def attach_agent(raw_url: str, seat: str, agent: str, agent_token: str, skills: list[str], root: Path | None = None) -> dict:
+    """Save this computer's link and take the same seat the page just logged in as."""
+    link_room(raw_url, root=root)
+    chosen = agent or os.environ.get("TEAM_LINK_AGENT") or "agent"
+    payload = _request(
+        root,
+        "POST",
+        "/v1/join",
+        {"seat": seat, "agent": chosen, "skills": skills},
+        agent=False,
+        token=agent_token or None,
     )
     link = load_link(root)
     key = payload["agent"]
