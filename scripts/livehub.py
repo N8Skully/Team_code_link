@@ -46,9 +46,7 @@ class Hub:
                 try:
                     self._sweep_locked()
                 except OSError:
-                    if self._closed:
-                        return
-                    raise
+                    return
 
     def _heartbeat_locked(self, viewer: str | None) -> None:
         if not viewer:
@@ -78,12 +76,17 @@ class Hub:
                 self.state = loaded
 
     def _save(self) -> None:
-        if self._closed or not self.data_dir.exists():
+        if self._closed:
             return
-        path = self.data_dir / STATE_NAME
-        temporary = path.with_suffix(".json.tmp")
-        temporary.write_text(json.dumps(self.state), encoding="utf-8")
-        temporary.replace(path)
+        try:
+            if not self.data_dir.exists():
+                return
+            path = self.data_dir / STATE_NAME
+            temporary = path.with_suffix(".json.tmp")
+            temporary.write_text(json.dumps(self.state), encoding="utf-8")
+            temporary.replace(path)
+        except OSError:
+            return
 
     def authorized(self, token: str) -> bool:
         if not token or not self.room_token:
