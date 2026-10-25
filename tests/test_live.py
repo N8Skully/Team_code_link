@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -84,6 +85,20 @@ class LiveRoomTests(unittest.TestCase):
         body = json.loads(score)
         self.assertIn("session API", body["snapshot"]["plan"]["framework"])
         self.assertEqual(body["snapshot"]["tasks"][0]["lead"], "home/claude")
+
+    def test_two_agents_on_one_computer_keep_their_own_voices(self) -> None:
+        liveclient.join("home", "claude", ["ui"], self.home)
+        liveclient.join("home", "chatgpt", ["docs"], self.home)
+        saved = json.loads((self.home / ".team-link-client.json").read_text(encoding="utf-8"))
+        self.assertIn("home/claude", saved["players"])
+        self.assertIn("home/chatgpt", saved["players"])
+        os.environ["TEAM_LINK_AGENT"] = "claude"
+        try:
+            text = liveclient.post("/v1/say", {"text": "from claude"}, self.home)
+        finally:
+            os.environ.pop("TEAM_LINK_AGENT", None)
+        self.assertIn("home/claude", text)
+        self.assertIn("from claude", text)
 
     def test_mcp_player_can_join_the_live_room(self) -> None:
         import subprocess

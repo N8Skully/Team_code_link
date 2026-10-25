@@ -109,8 +109,8 @@ def lan_ip() -> str | None:
 
 
 def live_link(base: str, token: str) -> str:
-    separator = "&" if "?" in base else "?"
-    return f"{base}{separator}token={token}"
+    clean = base.rstrip("/")
+    return f"{clean}/?token={token}"
 
 
 class Handler(BaseHTTPRequestHandler):

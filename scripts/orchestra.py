@@ -548,20 +548,25 @@ def balance(state: dict, approaches: dict | None = None, avoid: dict | None = No
         free.remove(chosen)
     needy = [task for task in state["tasks"] if task["status"] == "active" and len(task["members"]) < 2]
     for key in list(free):
-        if not needy:
-            break
-        chosen = _best_task(state, key, needy, avoid)
+        pool = [task for task in needy if task["id"] != avoid.get(key)]
+        if not pool:
+            continue
+        chosen = _best_task(state, key, pool, {})
         _join_part(state, chosen, key, moment, "pairing")
         free.remove(key)
-        if len(chosen["members"]) >= 2:
+        if len(chosen["members"]) >= 2 and chosen in needy:
             needy.remove(chosen)
     carrying = [task for task in state["tasks"] if task["status"] == "active"]
     for key in list(free):
-        options = [task for task in carrying if key not in task["members"]]
-        preferred = [task for task in options if avoid.get(key) != task["id"]]
-        options = preferred or options
+        options = [
+            task
+            for task in carrying
+            if key not in task["members"] and task["id"] != avoid.get(key)
+        ]
         if not options:
-            break
+            options = [task for task in carrying if key not in task["members"]]
+        if not options:
+            continue
         chosen = sorted(options, key=lambda task: (len(task["members"]), -score(state, key, task), task["n"]))[0]
         _join_part(state, chosen, key, moment, "helping")
         free.remove(key)
@@ -673,7 +678,7 @@ def render_view(state: dict, viewer: str | None) -> str:
         yours = next((task for task in snap["tasks"] if viewer in task["members"] and task["status"] == "active"), None)
     if yours:
         role = "lead" if yours["lead"] == viewer else "with the lead"
-        lines.append(f"Your part: {yours['title']} ({role})")
+        lines.append(f"Your part: {yours['id']} {yours['title']} ({role})")
         if yours["approach"]:
             lines.append(f"Approach to follow: {yours['approach']}")
         if yours["connects"]:

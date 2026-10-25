@@ -80,6 +80,43 @@ def parse_link(raw: str, token: str | None = None) -> tuple[str, str]:
     return base, room_token
 
 
+def players(link: dict) -> dict:
+    stored = link.get("players")
+    if isinstance(stored, dict):
+        return stored
+    legacy = link.get("agent_token")
+    key = link.get("player")
+    if legacy and key:
+        return {key: {"token": legacy, "key": key, "agent": link.get("agent"), "seat": link.get("seat")}}
+    return {}
+
+
+def select_player(link: dict) -> dict | None:
+    roster = players(link)
+    if not roster:
+        return None
+    wanted = (os.environ.get("TEAM_LINK_AGENT") or "").strip().lower()
+    if wanted:
+        if wanted in roster:
+            return roster[wanted]
+        matches = [
+            player
+            for player in roster.values()
+            if player.get("agent") == wanted or player.get("key") == wanted
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            names = ", ".join(sorted(player["key"] for player in matches))
+            raise OrchestraError(f"More than one player matches {wanted}: {names}.")
+        known = ", ".join(sorted(roster))
+        raise OrchestraError(f"This computer has no player named {wanted}. Joined: {known}.")
+    active = link.get("active") or link.get("player")
+    if active in roster:
+        return roster[active]
+    return next(iter(roster.values()))
+
+
 def link_room(raw: str, token: str | None = None, root: Path | None = None) -> str:
     base, room_token = parse_link(raw, token)
     current = {}
@@ -102,8 +139,10 @@ def _request(root: Path | None, method: str, path: str, body: dict | None = None
     link = load_link(root)
     url = link["url"].rstrip("/") + path
     headers = {"Authorization": f"Bearer {link['room_token']}", "Accept": "application/json"}
-    if agent and link.get("agent_token"):
-        headers["X-Agent-Token"] = link["agent_token"]
+    if agent:
+        player = select_player(link)
+        if player and player.get("token"):
+            headers["X-Agent-Token"] = player["token"]
     data = None
     if body is not None:
         data = json.dumps(body).encode("utf-8")
@@ -142,12 +181,18 @@ def join(seat: str, agent: str | None, skills: list[str], root: Path | None = No
         agent=False,
     )
     link = load_link(root)
-    link["agent_token"] = payload["token"]
+    key = payload["agent"]
+    agent_name = key.split("/", 1)[1]
+    roster = players(link)
+    roster[key] = {"token": payload["token"], "key": key, "agent": agent_name, "seat": seat}
+    link["players"] = roster
+    link["active"] = key
+    link["player"] = key
+    link["agent"] = agent_name
     link["seat"] = seat
-    link["agent"] = payload["agent"].split("/", 1)[1]
-    link["player"] = payload["agent"]
+    link["agent_token"] = payload["token"]
     save_link(link, root)
-    return payload.get("text") or f"Joined as {payload['agent']}."
+    return payload.get("text") or f"Joined as {key}."
 
 
 def room(root: Path | None = None) -> str:

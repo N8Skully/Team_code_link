@@ -146,6 +146,29 @@ class OrchestraTests(unittest.TestCase):
         with self.assertRaises(orchestra.OrchestraError):
             orchestra.say(state, "office/cursor", "I can hear you", form["id"], now=NOW)
 
+    def test_finishing_a_shared_part_moves_you_to_another_part(self) -> None:
+        state = orchestra.empty_state()
+        players(
+            state,
+            ("home", "claude", []),
+            ("office", "cursor", []),
+            ("studio", "hermes", []),
+            ("shop", "chatgpt", []),
+        )
+        plan(
+            state,
+            "home/claude",
+            [
+                {"title": "Login form", "brief": "Draw the form", "skills": []},
+                {"title": "Session API", "brief": "Own the session", "skills": []},
+            ],
+        )
+        orchestra.finish(state, "home/claude", now=NOW)
+        self.assertNotEqual(state["agents"]["home/claude"]["task"], task_named(state, "Login form")["id"])
+        self.assertEqual(state["agents"]["home/claude"]["task"], task_named(state, "Session API")["id"])
+        self.assertEqual(task_named(state, "Login form")["lead"], "shop/chatgpt")
+        self.assertEqual(task_named(state, "Login form")["status"], "active")
+
     def test_only_the_conductor_publishes_the_plan(self) -> None:
         state = orchestra.empty_state()
         players(state, ("home", "claude", []), ("office", "cursor", []))

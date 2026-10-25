@@ -110,12 +110,23 @@ def hub_dir(root: Path, override: str | None) -> Path:
 
 def checkout_seat(root: Path, name: str) -> str:
     branch = f"seat/{name.strip().lower()}"
-    result = subprocess.run(
-        ["git", "-C", str(root), "checkout", "-B", branch],
+    inside = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
         check=False,
         text=True,
         capture_output=True,
     )
+    if inside.returncode != 0 or inside.stdout.strip() != "true":
+        return ""
+    exists = subprocess.run(
+        ["git", "-C", str(root), "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
+        check=False,
+    )
+    if exists.returncode == 0:
+        command = ["git", "-C", str(root), "checkout", branch]
+    else:
+        command = ["git", "-C", str(root), "checkout", "-b", branch]
+    result = subprocess.run(command, check=False, text=True, capture_output=True)
     if result.returncode != 0:
         return "Code stays on the current branch until this checkout is clean."
     return f"Code branch: {branch}"
