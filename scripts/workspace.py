@@ -1,146 +1,202 @@
 #!/usr/bin/env python3
-"""CLI for the shared Team Code Link room."""
+"""CLI for the live Team Code Link orchestra."""
 
 from __future__ import annotations
 
 import argparse
+import json
+import os
+import shutil
+import subprocess
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import teamlink
+import liveclient
+import livehub
+from orchestra import OrchestraError
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="workspace.py",
-        description="Connect a computer to the shared project room and talk to the other agents.",
+        description="Live orchestra for up to six computers and any agent.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
 
-    join = commands.add_parser("join", help="Claim one of the six computer seats")
+    serve = commands.add_parser("serve", help="Start the live room on this computer")
+    serve.add_argument("--host", default="0.0.0.0")
+    serve.add_argument("--port", type=int, default=8765)
+    serve.add_argument("--public-url", help="Address other computers use, if this host is tunneled")
+    serve.add_argument("--data-dir")
+
+    link = commands.add_parser("link", help="Point this computer at the live room")
+    link.add_argument("url")
+    link.add_argument("--token")
+
+    join = commands.add_parser("join", help="Take a seat and declare what this agent is good at")
     join.add_argument("--name", required=True)
-    join.add_argument("--start", action="store_true", help="Also start a Cursor worker on this computer")
-    join.add_argument("--pool", help="Cursor Enterprise pool name")
-    join.add_argument("--computer-use", action="store_true")
-    join.add_argument("--dry-run", action="store_true")
+    join.add_argument("--agent")
+    join.add_argument("--skill", action="append", default=None)
+    join.add_argument("--start", action="store_true", help="Also start a Cursor worker")
 
-    leave = commands.add_parser("leave", help="Free a seat")
-    leave.add_argument("--name", help="Defaults to this computer's seat")
+    commands.add_parser("leave", help="Leave the orchestra")
+    conduct = commands.add_parser("conduct", help="Take the podium, or hand it to another player")
+    conduct.add_argument("--player", help="Player key, such as office/cursor")
+    commands.add_parser("room", help="Read the live score")
+    commands.add_parser("status", help="Read the live score")
 
-    commands.add_parser("status", help="Show the claimed seats")
+    plan = commands.add_parser("plan", help="Conductor: publish the group plan")
+    plan.add_argument("--file", required=True, help="JSON plan with title, framework, and tasks")
 
-    room = commands.add_parser("room", help="Show seats and recent messages")
-    room.add_argument("--max", type=int, default=20)
+    say = commands.add_parser("say", help="Speak in the live room")
+    say.add_argument("words", nargs="*")
+    say.add_argument("--text")
+    say.add_argument("--task", help="Speak inside one part")
+    say.add_argument("--file", action="append")
 
-    listen = commands.add_parser("listen", help="Show messages")
-    listen.add_argument("--max", type=int, default=20)
-    listen.add_argument("--after", help="Only messages after this id")
-    listen.add_argument("--mention", help="Only messages that mention this seat")
-    listen.add_argument("--follow", action="store_true", help="Keep watching for new messages")
+    listen = commands.add_parser("listen", help="Follow the live room")
+    listen.add_argument("--after", type=int, default=0)
 
-    say = commands.add_parser("say", help="Post a message to the other agents")
-    say.add_argument("words", nargs="*", help="Message text")
-    say.add_argument("--text", help="Message text")
-    say.add_argument("--agent", help="claude, chatgpt, cursor, hermes, or another short name")
-    say.add_argument("--reply-to", help="Message id to reply to")
-    say.add_argument("--file", action="append", help="Repo path you are editing")
+    finish = commands.add_parser("finish", help="Finish your part and take the next opening")
+    finish.add_argument("--task")
+    finish.add_argument("--approach", help="Approach for the next part, if you lead it")
 
-    commands.add_parser("sync", help="Merge origin/main into the current seat branch")
+    help_cmd = commands.add_parser("help-on", help="Jump in on a teammate's part")
+    help_cmd.add_argument("--task", required=True)
+
+    partition = commands.add_parser("partition", help="Hide a part from the rest of the orchestra")
+    partition.add_argument("--task", required=True)
+    partition.add_argument("--off", action="store_true")
+
+    approach = commands.add_parser("approach", help="Lead: set the approach teammates follow")
+    approach.add_argument("--task", required=True)
+    approach.add_argument("--text", required=True)
+
+    place = commands.add_parser("place", help="Conductor: move a player onto a part")
+    place.add_argument("--player", required=True)
+    place.add_argument("--task", required=True)
     return parser
 
 
 def message_text(args: argparse.Namespace) -> str:
     words = args.words or []
     if args.text and words:
-        raise teamlink.WorkspaceError("Pass the message either as words or with --text, not both.")
+        raise OrchestraError("Pass the message either as words or with --text, not both.")
     if args.text:
         return args.text
     if words:
         return " ".join(words)
-    raise teamlink.WorkspaceError("Pass a message to send.")
+    raise OrchestraError("Pass a message to send.")
 
 
-def follow(repo: Path, args: argparse.Namespace) -> int:
-    print("Watching the room. Stop with Ctrl+C.", flush=True)
-    last: str | None = None
-    first = True
+def hub_dir(root: Path, override: str | None) -> Path:
+    if override:
+        return Path(override)
+    result = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--git-dir"],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        path = Path(result.stdout.strip())
+        if not path.is_absolute():
+            path = root / path
+        return path / "team-link-hub"
+    return root / ".team-link-hub"
+
+
+def checkout_seat(root: Path, name: str) -> str:
+    branch = f"seat/{name.strip().lower()}"
+    result = subprocess.run(
+        ["git", "-C", str(root), "checkout", "-B", branch],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        return "Code stays on the current branch until this checkout is clean."
+    return f"Code branch: {branch}"
+
+
+def follow(root: Path, after: int) -> int:
+    print("Listening to the live room. Stop with Ctrl+C.", flush=True)
     while True:
-        text = teamlink.render_listen(
-            repo,
-            max_messages=args.max,
-            after=last or args.after,
-            mention=args.mention,
-        )
-        if text and not text.startswith("(none yet)") and not text.startswith("Offline copy"):
-            print(text, flush=True)
-            # The last id is on the last header line we printed. Ask again from the end.
-            talk_offline = teamlink.load_room_state(repo, required=False)
-            messages = teamlink.select_messages(
-                talk_offline[1],
-                max_messages=teamlink.MESSAGE_KEEP,
-                after=last or args.after,
-                mention=args.mention,
-            )
-            if messages:
-                last = messages[-1]["id"]
-        elif first:
-            print(text, flush=True)
-        first = False
-        time.sleep(3)
+        payload = liveclient.wait(after, root)
+        after = int(payload.get("seq") or after)
+        for event in payload.get("events") or []:
+            text = event.get("text")
+            if text:
+                print(text, flush=True)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        repo = teamlink.resolve_repo()
+        root = liveclient.repo_root()
+        if args.command == "serve":
+            livehub.serve_forever(args.host, args.port, hub_dir(root, args.data_dir), args.public_url)
+            return 0
+        if args.command == "link":
+            print(liveclient.link_room(args.url, args.token, root))
+            return 0
         if args.command == "join":
-            text = teamlink.claim_seat(
-                repo,
-                args.name,
-                checkout=True,
-                start_worker=args.start,
-                pool=args.pool,
-                computer_use=args.computer_use,
-                dry_run=args.dry_run,
-            )
-        elif args.command == "leave":
-            text = teamlink.release_seat(repo, args.name)
-        elif args.command == "status":
-            text = teamlink.render_status(repo)
-        elif args.command == "room":
-            text = teamlink.render_room(repo, max_messages=args.max)
-        elif args.command == "listen":
-            if args.follow:
-                return follow(repo, args)
-            text = teamlink.render_listen(
-                repo,
-                max_messages=args.max,
-                after=args.after,
-                mention=args.mention,
-            )
-        elif args.command == "say":
-            text = teamlink.post_message(
-                repo,
-                message_text(args),
-                agent=args.agent,
-                reply_to=args.reply_to,
-                files=args.file or [],
-            )
-        elif args.command == "sync":
-            text = teamlink.sync_seat(repo)
-        else:
-            parser.error(f"Unknown command {args.command}")
-            return 2
-        print(text)
-        return 0
-    except teamlink.WorkerMissing as exc:
-        print(exc, file=sys.stderr)
+            text = liveclient.join(args.name, args.agent, args.skill or [], root)
+            print(text)
+            print(checkout_seat(root, args.name))
+            if args.start:
+                if shutil.which("agent") is None:
+                    print(
+                        "The Cursor CLI is not installed, so the worker did not start.\n"
+                        "Install it with: curl https://cursor.com/install -fsS | bash\n"
+                        "Then run: agent login",
+                        file=sys.stderr,
+                    )
+                    return 2
+                os.chdir(root)
+                os.execvp("agent", ["agent", "worker", "start", "--name", args.name.strip().lower(), "--worker-dir", str(root)])
+            return 0
+        if args.command == "listen":
+            return follow(root, args.after)
+        if args.command in {"room", "status"}:
+            print(liveclient.room(root))
+            return 0
+        if args.command == "conduct":
+            print(liveclient.post("/v1/conduct", {"player": args.player}, root))
+            return 0
+        if args.command == "plan":
+            spec = json.loads(Path(args.file).read_text(encoding="utf-8"))
+            if not isinstance(spec, dict):
+                raise OrchestraError("The plan file must be a JSON object.")
+            print(liveclient.post("/v1/plan", spec, root))
+            return 0
+        if args.command == "say":
+            print(liveclient.post("/v1/say", {"text": message_text(args), "task": args.task, "files": args.file or []}, root))
+            return 0
+        if args.command == "leave":
+            print(liveclient.post("/v1/leave", {}, root))
+            return 0
+        if args.command == "finish":
+            print(liveclient.post("/v1/finish", {"task": args.task, "approach": args.approach}, root))
+            return 0
+        if args.command == "help-on":
+            print(liveclient.post("/v1/help", {"task": args.task}, root))
+            return 0
+        if args.command == "partition":
+            print(liveclient.post("/v1/partition", {"task": args.task, "on": not args.off}, root))
+            return 0
+        if args.command == "approach":
+            print(liveclient.post("/v1/approach", {"task": args.task, "text": args.text}, root))
+            return 0
+        if args.command == "place":
+            print(liveclient.post("/v1/place", {"player": args.player, "task": args.task}, root))
+            return 0
+        parser.error(f"Unknown command {args.command}")
         return 2
-    except teamlink.WorkspaceError as exc:
+    except OrchestraError as exc:
         print(exc, file=sys.stderr)
         return 1
     except KeyboardInterrupt:

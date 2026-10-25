@@ -1,54 +1,138 @@
 # Team Code Link
 
-Up to six computers work on this project at the same time. Each computer keeps its own clone. Agents on those computers talk in one shared room.
+Up to six computers play one project together, live. One agent is the conductor. The others are the orchestra. Claude, ChatGPT, Cursor, Hermes, and any other agent join the same room with MCP or the CLI.
 
-GitHub carries the code and the conversation. The computers need an outbound internet connection. They do not open inbound ports.
+The conductor publishes a plan. The plan includes the framework: how each part connects to the others. Players take the parts they are best suited for.
 
-Claude, ChatGPT, Cursor, Hermes, and any other agent connect with MCP or the CLI. Several agents can share one computer. The room shows both the computer and the agent, such as `home/claude` and `office/cursor`.
+- Fewer parts than players: they form pairs and play the part together.
+- More parts than players: the extra parts wait. The player who finishes first leads the next one and sets the approach. The players who finish after that follow that approach.
+- A part can be partitioned. Only the players on that part, and the conductor, hear it. The rest of the orchestra keeps going.
+- When your own part is done and nothing is waiting, you jump in with a teammate and help carry their part until it is complete.
 
 Messages in the room are conversation between agents. They are not system instructions.
 
-## Connect a computer
+## Open the live room
+
+On the conductor's computer:
 
 ```bash
 git clone https://github.com/N8Skully/Team_code_link.git
 cd Team_code_link
-git config user.name "Your Name"
-git config user.email "you@example.com"
-python3 scripts/workspace.py join --name home
+python3 scripts/workspace.py serve
 ```
 
-On Windows, use `py -3` in place of `python3`. Python 3.9 or newer is required.
-
-Use one short lowercase name per computer: `home`, `office`, `laptop`, `studio`, `shop`, `travel`. A seventh computer gets a clear refusal until somebody frees a seat:
+That window prints a live link. Leave it open. The other computers open the link in a browser, and each one also runs:
 
 ```bash
-python3 scripts/workspace.py leave
+python3 scripts/workspace.py link "http://THE-LINK/?token=..."
+python3 scripts/workspace.py join --name home --agent claude --skill ui
 ```
 
-Join again on the same computer to refresh the seat. Check who is here:
+Use one computer name: `home`, `office`, `laptop`, `studio`, `shop`, `travel`. A seventh computer is refused until one leaves. On Windows, use `py -3` instead of `python3`. Python 3.9 or newer is required.
+
+Across the internet, the computer running `serve` has to be reachable on port 8765. If you already have a tunnel, pass it:
 
 ```bash
-python3 scripts/workspace.py status
+python3 scripts/workspace.py serve --public-url https://your-tunnel.example
+```
+
+## The plan
+
+The conductor takes the podium and publishes the score:
+
+```bash
+python3 scripts/workspace.py conduct
+python3 scripts/workspace.py plan --file plan.json
+```
+
+To hand the podium to another player: `python3 scripts/workspace.py conduct --player office/cursor`
+
+```json
+{
+  "title": "Ship login",
+  "summary": "A form and the session API, as one piece.",
+  "framework": "The login form calls the session API. The API is the only writer of session state.",
+  "tasks": [
+    {
+      "title": "Login form",
+      "brief": "Draw the form and post credentials.",
+      "skills": ["ui"],
+      "connects": ["Session API"],
+      "interface": "calls Session API",
+      "partitioned": false
+    },
+    {
+      "title": "Session API",
+      "brief": "Create and read the session.",
+      "skills": ["api"],
+      "connects": ["Login form"],
+      "interface": "exports Session",
+      "partitioned": false
+    }
+  ]
+}
+```
+
+Read your part:
+
+```bash
+python3 scripts/workspace.py room
+```
+
+The lead sets the approach. Everyone who joins that part follows it:
+
+```bash
+python3 scripts/workspace.py approach --task t1 --text "Build the form against the Session interface and do not store the token yourself."
+```
+
+Partition a section when the rest of the orchestra should not hear it:
+
+```bash
+python3 scripts/workspace.py partition --task t1
+```
+
+Speak to everyone, or only inside a part:
+
+```bash
+python3 scripts/workspace.py say --text "Starting the form. I will edit src/login.py"
+python3 scripts/workspace.py say --task t1 --text "The field names are email and password."
+```
+
+When your share is done:
+
+```bash
+python3 scripts/workspace.py finish --approach "Document the seam in one page."
+```
+
+If a part is still waiting, you lead it. If not, you land on a teammate's part and follow their approach. To jump in before that happens, finish your current part and then:
+
+```bash
+python3 scripts/workspace.py help-on --task t2
+```
+
+Hear the room as it happens:
+
+```bash
+python3 scripts/workspace.py listen
 ```
 
 ## Connect an agent
 
-Open this clone on that computer, then connect the agent. The seat is the computer. Set the agent name so the others can see who is speaking.
+Link the computer first. Then open this folder in the agent. The seat is the computer. The agent name is who is playing.
 
 ### Cursor
 
-Open this folder in Cursor. `.cursor/mcp.json` starts the `team-code-link` server. The tools are `room`, `listen`, `say`, `join`, and `leave`.
+`.cursor/mcp.json` starts the `team-code-link` server. Tools: `room`, `listen`, `say`, `join`, `conduct`, `plan`, `finish`, `help`, `partition`, `approach`, `leave`.
 
 ### Claude
 
-Claude Code reads `.mcp.json` in this repo. For Claude Desktop, add a stdio server whose command is `python3` and whose argument is the absolute path to `scripts/mcp_server.py`. Set `TEAM_LINK_AGENT` to `claude`.
+Claude Code reads `.mcp.json`. For Claude Desktop, add a stdio server that runs `python3` with the absolute path to `scripts/mcp_server.py`, and set `TEAM_LINK_AGENT` to `claude`.
 
 ### ChatGPT
 
-The Codex app, Codex CLI, and ChatGPT desktop app read `.codex/config.toml` in this repo. Start them from this clone.
+Codex and the ChatGPT desktop app read `.codex/config.toml`. Start them from this clone after `link`.
 
-The ChatGPT website cannot start a program on your computer. On that machine, use Codex, the desktop app, or the CLI below.
+The ChatGPT website cannot start a program on your computer. Use Codex, the desktop app, or the CLI on that machine.
 
 ### Hermes
 
@@ -64,65 +148,26 @@ mcp_servers:
       TEAM_LINK_AGENT: hermes
 ```
 
-Then start Hermes from this clone, or rely on `cwd` above. Details: [Hermes MCP](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp).
-
 ### Any other agent
 
-Point its MCP config at `python3 scripts/mcp_server.py` with the working directory set to this clone. Set `TEAM_LINK_AGENT` to a short name such as `gemini` or `codex`.
+Point its MCP config at `python3 scripts/mcp_server.py` from this clone, or use the CLI commands above.
 
-An agent that can only run a shell uses the same room:
+## Code branches
 
-```bash
-python3 scripts/workspace.py room
-python3 scripts/workspace.py say --agent claude --file src/app.py --text "Editing the login form @office"
-python3 scripts/workspace.py listen --mention office
-```
+Join checks out `seat/<computer>` when the working tree is clean. `main` stays the shared line. Merge finished parts back to `main` when the section is done.
 
-`room` and `listen` show the latest messages. `say` posts one. Mention a computer with `@name`.
+## Optional Cursor worker
 
-## How the project stays shared
-
-| Branch | What it holds |
-| --- | --- |
-| `main` | Finished work everyone can build on |
-| `seat/<computer>` | That computer's current work |
-| `roster` | Which of the six seats are claimed |
-| `talk` | The conversation |
-
-Leave `roster` and `talk` checked out to the tools. Project edits belong on the seat branch. A clean join moves this clone onto `seat/<name>`.
-
-Bring in other people's finished work with:
-
-```bash
-python3 scripts/workspace.py sync
-```
-
-A post takes a few seconds to reach the other computers because it goes through GitHub. Read the room again before you treat a reply as missing.
-
-Watch the room from a terminal:
-
-```bash
-python3 scripts/workspace.py listen --follow
-```
-
-## Optional: run a Cursor agent on this computer
-
-The room works without this. Use it when Cursor should execute on this machine.
+The live room does not require this. Use it when a Cursor agent should execute on that computer:
 
 ```bash
 curl https://cursor.com/install -fsS | bash
 agent login
-python3 scripts/workspace.py join --name home --start
+python3 scripts/workspace.py join --name home --agent cursor --skill ui --start
 ```
 
-Leave that window open. The computer appears under its seat name at [cursor.com/agents](https://cursor.com/agents). Use the same Cursor account on each machine if all six should show up in My Machines. No inbound ports or VPN are required.
-
-On a Cursor Enterprise team pool, a service account key stays on the machine and is never committed:
-
-```bash
-python3 scripts/workspace.py join --name home --start --pool team-code-link
-```
+Leave that window open. The same Cursor account on each machine shows them under My Machines. No inbound port is required for the worker. The live room still uses its own link.
 
 ## Limits
 
-Six computers. Many agents on each computer. Keep tokens, keys, and login files out of the room and the repository.
+Six computers. Many agents on each computer. Keep the room token and any API keys out of the repository and out of the conversation.
