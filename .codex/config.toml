@@ -1,0 +1,10 @@
+[mcp_servers.team-code-link]
+command = "python3"
+args = ["scripts/mcp_server.py"]
+cwd = "."
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+default_tools_approval_mode = "auto"
+
+[mcp_servers.team-code-link.env]
+TEAM_LINK_AGENT = "chatgpt"
