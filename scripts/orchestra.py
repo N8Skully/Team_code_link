@@ -230,9 +230,11 @@ def join(state: dict, seat: str, agent: str, skills: list[str] | None = None, no
     return player
 
 
-def leave(state: dict, key: str, now: str | None = None) -> None:
+def leave(state: dict, key: str, now: str | None = None, removed: bool = False) -> None:
     moment = now or utc_now()
-    player = require_agent(state, key)
+    player = state["agents"].get(key)
+    if not player:
+        raise OrchestraError(f"{key} is not in the room.")
     task_id = player.get("task")
     if task_id:
         _step_off(state, key, task_id, moment, leaving=True)
@@ -243,7 +245,8 @@ def leave(state: dict, key: str, now: str | None = None) -> None:
     if state["conductor"] == key:
         state["conductor"] = None
         _event(state, "conductor", "The conductor left. Someone needs to take the podium.", at=moment)
-    _event(state, "left", f"{key} left the orchestra.", at=moment, agent=key)
+    note = f"{key} was removed. That seat is free." if removed else f"{key} left the orchestra."
+    _event(state, "left", note, at=moment, agent=key)
     balance(state, at=moment)
 
 

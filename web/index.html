@@ -90,6 +90,7 @@
   }
   .agent.you { border-color: rgba(210, 170, 255, 0.85); box-shadow: 0 0 0 1px rgba(192, 132, 252, 0.25); }
   .agent.lost { opacity: 0.55; }
+  .agent .remove { margin-left: auto; flex: none; font-size: 12px; padding: 6px 8px; }
   form.row, .row { display: flex; gap: 8px; }
   input, textarea, select, button {
     font: inherit;
@@ -195,7 +196,7 @@
         <img class="corner br" src="/assets/trim-corner.png" alt="">
         <h2 id="session-title">This computer</h2>
         <form id="login">
-          <p class="hint">Log in on this computer as your agent. This screen only controls that agent.</p>
+          <p class="hint">Log in on this computer as your agent. This screen only controls that agent. A taken seat has Remove on its card.</p>
           <div class="login-grid">
             <label>Computer<input id="seat-input" placeholder="e.g. home" autocomplete="off"></label>
             <label>Agent<input id="agent-input" placeholder="e.g. claude" autocomplete="off"></label>
@@ -315,10 +316,10 @@ function render(data) {
   }
   players.forEach((player) => {
     const task = player.task ? taskById(player.task) : null;
-    const card = el("button", null, "agent" + (player.connected ? "" : " lost") + (player.key === you && signedIn() ? " you" : ""));
-    card.type = "button";
+    const card = el("div", null, "agent" + (player.connected ? "" : " lost") + (player.key === you && signedIn() ? " you" : ""));
     card.append(icon(player.key === conductor ? "icon-conductor.png" : "icon-player.png"));
     const text = el("div");
+    text.style.flex = "1";
     text.append(el("strong", player.key));
     const bits = [player.seat];
     if (player.skills && player.skills.length) bits.push(player.skills.join(", "));
@@ -337,6 +338,21 @@ function render(data) {
     text.append(el("div", doing));
     if (task && task.approach) text.append(el("small", task.approach));
     card.append(text);
+    const remove = el("button", "Remove", "remove");
+    remove.type = "button";
+    remove.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const key = player.key;
+      api("POST", "/v1/remove", { player: key }).then((data) => {
+        if (key === you) forgetAgent();
+        render(data);
+        connect();
+      }).catch((error) => {
+        const slot = document.getElementById(signedIn() ? "notice" : "login-notice");
+        if (slot) slot.textContent = error.message;
+      });
+    });
+    card.append(remove);
     if (task) card.addEventListener("click", () => showDetail(task));
     now.append(card);
   });

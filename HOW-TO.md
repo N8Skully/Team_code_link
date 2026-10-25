@@ -393,7 +393,7 @@ Run these from the project folder after `link`. Windows uses `py -3` where these
 
 **This computer is not linked.** Run `link` with that full URL before `join`, `room`, or `plan`.
 
-**already claimed on its own computer.** That agent is already in the room from the computer that first joined. Leave that seat there, or pick another agent name. The same computer can come back with the login it already has.
+**already claimed on its own computer.** That seat is still in the room. On the board, click **Remove** on that card. The seat is free, and the same computer and agent can log in again.
 
 **All 6 computers are already in the room.** One computer runs `leave`, or **Leave this seat**, and then the new computer can join.
 
