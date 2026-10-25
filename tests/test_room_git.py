@@ -408,8 +408,17 @@ class RoomGitTests(unittest.TestCase):
             self.assertIn("studio/hermes", text)
             self.assertIn(teamlink.ROOM_BANNER, text)
         finally:
-            proc.kill()
-            proc.wait(timeout=5)
+            if proc.stdin is not None:
+                proc.stdin.close()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+            if proc.stdout is not None:
+                proc.stdout.close()
+            if proc.stderr is not None:
+                proc.stderr.close()
 
     def test_session_hook_adds_the_room(self) -> None:
         home = self.make_clone("home")
