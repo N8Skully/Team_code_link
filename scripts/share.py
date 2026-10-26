@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -73,6 +74,68 @@ def copy_folder(src: str, dest: Path) -> None:
     if result.returncode >= 8:
         detail = (result.stderr or result.stdout or "robocopy failed").strip()
         raise OrchestraError(detail)
+
+
+_LOGIN_URL = re.compile(r"https://login\.tailscale\.com/\S+")
+
+
+def read_tailscale(installed: bool, returncode: int, stdout: str, host: str) -> dict:
+    ip = ""
+    for line in (stdout or "").splitlines():
+        text = line.strip()
+        if text.startswith("100."):
+            ip = text
+            break
+    connected = installed and returncode == 0 and bool(ip)
+    if not installed:
+        login = "https://tailscale.com/download/windows"
+    elif connected:
+        login = ""
+    else:
+        login = "https://login.tailscale.com/"
+    return {"installed": installed, "connected": connected, "ip": ip, "host": host, "loginUrl": login}
+
+
+def tailscale_status() -> dict:
+    host = os.environ.get("COMPUTERNAME") or os.environ.get("HOSTNAME") or ""
+    if shutil.which("tailscale") is None:
+        return read_tailscale(False, 1, "", host)
+    result = _run(["tailscale", "ip", "-4"], check=False)
+    return read_tailscale(True, result.returncode, result.stdout or "", host)
+
+
+def tailscale_login() -> str:
+    """Start Tailscale sign-in and return the page the browser should open."""
+    status = tailscale_status()
+    if not status["installed"]:
+        return status["loginUrl"]
+    if status["connected"]:
+        return ""
+    import subprocess
+    import time
+
+    proc = subprocess.Popen(
+        ["tailscale", "login"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    found = ""
+    deadline = time.monotonic() + 4
+    while time.monotonic() < deadline:
+        line = proc.stdout.readline() if proc.stdout else ""
+        if not line:
+            if proc.poll() is not None:
+                break
+            time.sleep(0.1)
+            continue
+        match = _LOGIN_URL.search(line)
+        if match:
+            found = match.group(0).rstrip(").,")
+            break
+    return found or "https://login.tailscale.com/"
 
 
 def tailscale_hostname() -> str:

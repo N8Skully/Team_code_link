@@ -89,6 +89,16 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(share.next_action("nate", "ToolsProject", {"seat": "office", "path": r"\\OFFICE-PC\ToolsProject", "ready": False}, "", "ToolsProject"), "unshare")
         self.assertEqual(share.next_action("nate", "ToolsProject", {"seat": "nate", "path": "", "ready": False}, "", ""), "publish")
 
+    def test_tailscale_status_reads_the_address(self) -> None:
+        connected = share.read_tailscale(True, 0, "100.64.1.2\n", "NATE-PC")
+        self.assertTrue(connected["connected"])
+        self.assertEqual(connected["ip"], "100.64.1.2")
+        waiting = share.read_tailscale(True, 1, "", "NATE-PC")
+        self.assertFalse(waiting["connected"])
+        self.assertEqual(waiting["loginUrl"], "https://login.tailscale.com/")
+        missing = share.read_tailscale(False, 1, "", "NATE-PC")
+        self.assertIn("download", missing["loginUrl"])
+
 
 if __name__ == "__main__":
     unittest.main()

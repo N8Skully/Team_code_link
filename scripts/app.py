@@ -65,8 +65,22 @@ def stop_tunnel() -> None:
         url_file.unlink(missing_ok=True)
 
 
-def open_board(url: str) -> None:
-    webbrowser.open(url)
+def open_login(room_url: str) -> None:
+    from urllib.parse import quote
+
+    webbrowser.open("http://127.0.0.1:8770/?room=" + quote(room_url, safe=""))
+
+
+def wait_for_login() -> None:
+    import urllib.request
+
+    for _ in range(40):
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:8770/tailscale", timeout=0.4) as response:
+                if response.status == 200:
+                    return
+        except OSError:
+            time.sleep(0.1)
 
 
 def serve_in_thread(host: str, port: int, data_dir: Path, public_url: str | None) -> threading.Thread:
@@ -103,7 +117,8 @@ def run_host(port: int, local: bool, public_url: str | None) -> int:
         liveclient.link_room(local_url, root=root)
         threading.Thread(target=attach.serve, daemon=True, name="team-link-attach").start()
         threading.Thread(target=source_loop.loop, args=(root,), daemon=True, name="team-link-source").start()
-        open_board(f"http://127.0.0.1:{port}/")
+        wait_for_login()
+        open_login(f"http://127.0.0.1:{port}/")
         while server.is_alive():
             time.sleep(0.5)
         return 0
@@ -123,7 +138,8 @@ def run_join(url: str) -> int:
     threading.Thread(target=attach.serve, daemon=True, name="team-link-attach").start()
     threading.Thread(target=source_loop.loop, args=(root,), daemon=True, name="team-link-source").start()
     link = liveclient.load_link(root)
-    open_board(link["url"] + "/")
+    wait_for_login()
+    open_login(link["url"] + "/")
     print("Leave this window open. Closing it stops the agent connection on this computer.")
     try:
         while True:
