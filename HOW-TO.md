@@ -39,7 +39,7 @@ Computer names, agent names, and skills are short lowercase letters, numbers, an
 
 One computer hosts. Everyone else connects to it. The host runs the room and leaves that window open. The other computers do not run `serve`, and they do not open a port.
 
-On Windows, double-click `launch.bat`. The first time, it installs Cloudflare Tunnel. Windows may ask you to approve that once. The tunnel makes an outbound connection, so the host does not accept inbound traffic from the internet.
+On Windows, double-click `dist\Team Code Link.exe`. Run it as administrator when this computer is the source. The first time, it installs Cloudflare Tunnel. Windows may ask you to approve that once. The tunnel makes an outbound connection, so the host does not accept inbound traffic from the internet.
 
 On Mac or Linux, point a tunnel at port 8765, then:
 
@@ -54,7 +54,7 @@ The window prints:
 
 The share link changes each time the host window starts. Send the new one. The room token on the host stays in the host's data folder.
 
-Same Wi-Fi only, with no internet link: `launch.bat --local`, or `python3 scripts/workspace.py serve` with no public address. That share link is the host's address on the local network.
+Same Wi-Fi only, with no internet link: `Team Code Link.exe --local`, or `python3 scripts/workspace.py serve` with no public address. That share link is the host's address on the local network.
 
 If you already have a public address:
 
@@ -62,7 +62,7 @@ If you already have a public address:
 python3 scripts/workspace.py serve --public-url https://your-tunnel.example
 ```
 
-Windows: `launch.bat --public-url https://your-tunnel.example`.
+Windows: `Team Code Link.exe --public-url https://your-tunnel.example`.
 
 Closing the host window stops the room for every computer.
 
@@ -251,17 +251,13 @@ python3 scripts/workspace.py listen
 
 ## Shared code
 
-Each part has one branch, named in the score: `part/t1`, `part/t2`, and so on. Everyone on that part edits that branch. The work is one piece, not a separate copy per player.
+The conductor sets the project name and the source computer on the board. The source computer shares one folder over Tailscale. The board prints the path, such as `\\NATE-PC\ToolsProject`. Open that path in Cursor. A save writes the file on the source computer.
 
-Before you edit a part someone else already started:
+On the source computer the files are in `%USERPROFILE%\Team Code Link Projects\<project>`. Copy an existing project into that folder. It starts empty. Tailscale must be signed in, and the exe must be running as administrator, before the path appears.
 
-```bash
-python3 scripts/workspace.py sync
-```
+Claim the file on the board, or let the Cursor hook claim it, before a save. One seat holds a file. The next save from another seat is refused. Release the file when you are done. The source computer commits a local git history when the source is handed to another computer. GitHub is not required.
 
-`sync` pulls their commits and pushes yours.
-
-Commit your own files as you go. When your share is done, the working tree must be clean (commit or stash first):
+A terminal checkout can still use one branch per part, `part/<id>`. `sync` pulls and pushes that branch. `finish` merges it to `main` when the merge is clean. The shared folder is the copy the agents edit together.
 
 ```bash
 python3 scripts/workspace.py finish --approach "Document the seam in one page."
@@ -283,11 +279,9 @@ On the page, open the part and choose **Join this part**. A waiting part cannot 
 
 `--approach` on `finish` is the approach you will set if you lead the next part. If you land on a teammate's part instead, you follow their approach.
 
-## When someone drops
+## When someone leaves
 
-If a player goes quiet for about 20 seconds, the board shows **connection lost**. A part that player was holding alone becomes **waiting**. It stays on the same branch, with the commits already pushed.
-
-A waiting part is not given to someone who is still in the middle of another run. A new arrival does not take it either. The player who finishes the run they are already on picks it up and becomes the lead.
+A seat stays until that player leaves, or someone removes it. Quiet time does not take them off the part.
 
 The same computer can come back. The browser session logs in again as that agent. The terminal on that computer still has the saved token. Another computer cannot take the name.
 
@@ -407,6 +401,6 @@ Run these from the project folder after `link`. Windows uses `py -3` where these
 
 **The part does not fit.** The merge into `main` conflicted. `main` was not changed. You are on the part branch. Fix the seam, commit, and `finish` again.
 
-**Connection lost, while the page is open.** The agent went quiet. A logged-in page keeps its own agent present. A terminal agent stays present while `listen` is running, or while that agent keeps calling the room. Start `listen`, or run `room` again.
+**A seat is still taken after the agent goes quiet.** That is expected. Quiet time does not free the seat. Use **Remove** on the card, or **Leave this seat**, when that computer should give the seat up.
 
 **The ChatGPT website cannot see the room.** Use Codex, the desktop app, or the terminal on that computer.

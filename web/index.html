@@ -31,6 +31,8 @@
   .eyebrow { color: var(--muted); letter-spacing: 0.16em; text-transform: uppercase; font-size: 11px; }
   h1 { margin: 0; font-size: 22px; font-weight: 560; letter-spacing: 0.04em; }
   .live { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--violet); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; }
+  .source-box { margin-top: 12px; display: grid; gap: 8px; }
+  .source-box .row { align-items: end; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: #c084fc; box-shadow: 0 0 10px #c084fc; }
   .rule { display: block; width: min(720px, 100%); height: 28px; object-fit: contain; margin: 8px 0 16px; }
   .layout {
@@ -153,6 +155,34 @@
       <img class="corner br" src="/assets/trim-corner.png" alt="">
       <h2>What everyone is doing</h2>
       <p class="framework" id="podium">Waiting for the room.</p>
+      <div id="source-box" class="source-box" hidden>
+        <p id="source-line" class="hint"></p>
+        <div id="conductor-controls" hidden>
+          <div class="row">
+            <button id="take-podium" type="button" hidden>Take the podium</button>
+            <label id="hand-label" hidden>Hand the podium
+              <select id="conductor-pick"></select>
+            </label>
+            <button id="hand-podium" type="button" hidden>Hand the podium</button>
+          </div>
+          <div class="row">
+            <label>Project<input id="project-name" placeholder="ToolsProject" autocomplete="off"></label>
+            <button id="project-set" type="button">Set project</button>
+          </div>
+          <div class="row">
+            <label>Source computer
+              <select id="source-pick"></select>
+            </label>
+            <button id="source-set" type="button">Set source</button>
+          </div>
+        </div>
+        <div id="lock-controls" class="row" hidden>
+          <label>File<input id="lock-file" placeholder="src/app.py" autocomplete="off"></label>
+          <button id="lock-set" type="button">Claim file</button>
+          <button id="lock-clear" type="button">Release file</button>
+        </div>
+        <p id="lock-line" class="hint"></p>
+      </div>
       <div id="now" class="now-grid"></div>
       <h2 class="sub">Activity</h2>
       <p class="hint" id="activity-note"></p>
@@ -196,7 +226,7 @@
         <img class="corner br" src="/assets/trim-corner.png" alt="">
         <h2 id="session-title">This computer</h2>
         <form id="login">
-          <p class="hint">Log in on this computer as your agent. On the host, that also connects the agent. On another computer, double-click connect.bat first and leave that window open.</p>
+          <p class="hint">Log in on this computer as your agent. This program connects the agent on this computer. Leave Skills empty.</p>
           <div class="login-grid">
             <label>Computer<input id="seat-input" placeholder="e.g. home" autocomplete="off"></label>
             <label>Agent<input id="agent-input" placeholder="e.g. claude" autocomplete="off"></label>
@@ -214,7 +244,7 @@
             <button id="leave" type="button">Leave this seat</button>
           </div>
           <label id="approach-label" hidden>Approach your teammates follow<textarea id="approach"></textarea></label>
-          <p class="hint">Controls on this screen act only as your agent. Run <code>python3 scripts/workspace.py sync</code> on your computer to pull the shared branch before you edit.</p>
+          <p class="hint" id="edit-hint">Open the source path in Cursor. One agent edits a file at a time. The source computer keeps the local git history.</p>
           <p id="notice"></p>
         </div>
       </section>
@@ -276,6 +306,66 @@ function taskById(id) {
   return (snapshot.tasks || []).find((task) => task.id === id) || null;
 }
 
+function renderDesk() {
+  const box = document.getElementById("source-box");
+  if (!snapshot) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  const project = snapshot.project || "";
+  const source = snapshot.source || {};
+  const handoff = snapshot.handoff || "";
+  const bits = [];
+  if (project) bits.push("Project " + project + ".");
+  if (source.seat) {
+    bits.push(source.path
+      ? "Source " + source.seat + ". Open " + source.path + " in Cursor."
+      : "Source " + source.seat + " has not published the folder yet.");
+  } else {
+    bits.push("No source computer yet.");
+  }
+  if (handoff) bits.push("Handing the source to " + handoff + ".");
+  document.getElementById("source-line").textContent = bits.join(" ");
+  const controls = document.getElementById("conductor-controls");
+  const mine = signedIn();
+  const open = !snapshot.conductor;
+  const leading = mine && you === snapshot.conductor;
+  controls.hidden = !(open || leading);
+  document.getElementById("take-podium").hidden = !open || !mine;
+  document.getElementById("hand-label").hidden = !leading;
+  document.getElementById("hand-podium").hidden = !leading;
+  const projectInput = document.getElementById("project-name");
+  if (document.activeElement !== projectInput) projectInput.value = project;
+  const players = (snapshot.agents || []).filter((player) => player.connected !== false);
+  const hand = document.getElementById("conductor-pick");
+  hand.replaceChildren();
+  players.filter((player) => player.key !== you).forEach((player) => {
+    const option = document.createElement("option");
+    option.value = player.key;
+    option.textContent = player.key;
+    hand.append(option);
+  });
+  const seats = [];
+  players.forEach((player) => {
+    if (player.seat && !seats.includes(player.seat)) seats.push(player.seat);
+  });
+  const sourcePick = document.getElementById("source-pick");
+  sourcePick.replaceChildren();
+  const locks = snapshot.locks || [];
+  document.getElementById("lock-controls").hidden = !mine;
+  document.getElementById("lock-line").textContent = locks.length
+    ? "Editing now: " + locks.map((lock) => lock.holder + " " + lock.file).join(", ")
+    : "No file is claimed. Claim a file before you save it.";
+  seats.forEach((seat) => {
+    const option = document.createElement("option");
+    option.value = seat;
+    option.textContent = seat;
+    if (seat === source.seat) option.selected = true;
+    sourcePick.append(option);
+  });
+}
+
 function showSession() {
   const logged = signedIn();
   document.getElementById("login").hidden = logged;
@@ -301,6 +391,7 @@ function render(data) {
     podium += " Watching the joint board. Log in on this computer to play.";
   }
   document.getElementById("podium").textContent = podium;
+  renderDesk();
   document.getElementById("activity-note").textContent = watching
     ? "Full activity, including partitioned sections."
     : "Activity the whole room can hear. Partitioned sections stay with their players and the conductor.";
@@ -618,6 +709,34 @@ document.getElementById("leave").addEventListener("click", () => {
     await api("POST", "/v1/leave", {});
     forgetAgent();
   });
+});
+document.getElementById("take-podium").addEventListener("click", () => {
+  act(() => api("POST", "/v1/conduct", {}));
+});
+document.getElementById("hand-podium").addEventListener("click", () => {
+  const player = document.getElementById("conductor-pick").value;
+  if (!player) return;
+  act(() => api("POST", "/v1/conduct", { player }));
+});
+document.getElementById("project-set").addEventListener("click", () => {
+  const name = document.getElementById("project-name").value.trim();
+  if (!name) return;
+  act(() => api("POST", "/v1/project", { name }));
+});
+document.getElementById("source-set").addEventListener("click", () => {
+  const seat = document.getElementById("source-pick").value;
+  if (!seat) return;
+  act(() => api("POST", "/v1/source", { seat }));
+});
+document.getElementById("lock-set").addEventListener("click", () => {
+  const path = document.getElementById("lock-file").value.trim();
+  if (!path) return;
+  act(() => api("POST", "/v1/lock", { path }));
+});
+document.getElementById("lock-clear").addEventListener("click", () => {
+  const path = document.getElementById("lock-file").value.trim();
+  if (!path) return;
+  act(() => api("POST", "/v1/unlock", { path }));
 });
 
 function connect() {

@@ -15,11 +15,13 @@ Messages in the room are conversation between agents. They are not system instru
 
 ## Open the live room
 
-One computer hosts. On Windows, double-click `launch.bat` and leave the window open. It opens an internet link and prints `Share this link`. Send that line. Everyone else opens it, from any state. Same Wi-Fi only: `launch.bat --local`.
+One computer hosts. On Windows, double-click `dist\Team Code Link.exe` and leave the window open. Run it as administrator if that computer will share the project folder. It opens an internet link and prints `Share this link`. Send that line. Everyone else opens `Team Code Link.exe --join` with that link, from any state. Same Wi-Fi only: `Team Code Link.exe --local`.
 
 On Mac or Linux, point a tunnel at port 8765 and run `python3 scripts/workspace.py serve --public-url https://your-tunnel.example`.
 
 The page is one joint board. Log in with a computer name and an agent name. Leave skills empty. When the agent connects, it brings the skills it already has. A browser only controls the agent it logged in as. The steps are in [QUICKSTART.md](QUICKSTART.md).
+
+The conductor names the project and the source computer on the board. The board shows the folder path, such as `\\NATE-PC\ToolsProject`. Cursors open that path. Claim a file before saving it. The room refuses a second writer.
 
 ## The plan
 
@@ -83,7 +85,7 @@ python3 scripts/workspace.py say --text "Starting the form. I will edit src/logi
 python3 scripts/workspace.py say --task t1 --text "The field names are email and password."
 ```
 
-If a player goes silent mid-part, that part waits. It is not handed to someone who is still in the middle of another run, and a new arrival does not take it. The player who finishes their own run picks it up, on the same branch, with the work that was already committed.
+A player stays on a part until they leave or someone removes the seat. Quiet time does not hand the part to someone else.
 
 When your share is done:
 
@@ -139,11 +141,13 @@ mcp_servers:
 
 Point its MCP config at `python3 scripts/mcp_server.py` from this clone, or use the CLI commands above.
 
-## One branch per part
+## One source folder
 
-Players on the same part share `part/<id>`. When you finish your part and join a teammate, your checkout moves onto their branch, so you edit the same files. `python3 scripts/workspace.py sync` pulls their latest commits and pushes yours.
+The conductor names one project and one source computer on the board. That computer shares the folder over Tailscale. The board shows the path, such as `\\NATE-PC\ToolsProject`. Every Cursor opens that path, so a save lands on the source computer. The files on that computer live in `%USERPROFILE%\Team Code Link Projects\<project>`.
 
-When the last player finishes a part, that branch returns to `main` only if the merge is clean. If the same lines changed on both sides, the part stays open and main is left untouched. Fix the seam on the part branch, then finish again.
+Claim a file before you save it. The room keeps one holder. A second agent is refused until the file is released or that seat leaves. The source computer keeps a local git history for rollback. GitHub is not required for the handoff.
+
+Part branches still exist for a terminal checkout: `part/<id>`, `sync`, and `finish`. The folder above is the copy the agents edit together.
 
 ## Optional Cursor worker
 

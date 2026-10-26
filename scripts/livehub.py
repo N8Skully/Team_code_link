@@ -7,6 +7,7 @@ import json
 import os
 import secrets
 import socket
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,7 +16,10 @@ from urllib.parse import parse_qs, urlparse
 
 import orchestra
 
-WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
+def web_root() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS")) / "web"
+    return Path(__file__).resolve().parents[1] / "web"
 
 TOKEN_NAME = "room.token"
 STATE_NAME = "room.json"
@@ -31,22 +35,9 @@ class Hub:
         self._closed = False
         self._caller = threading.local()
         self._load()
-        self._sweeper = threading.Thread(target=self._sweep_loop, daemon=True)
-        self._sweeper.start()
 
     def close(self) -> None:
         self._closed = True
-
-    def _sweep_loop(self) -> None:
-        while not self._closed:
-            time.sleep(1)
-            with self.cond:
-                if self._closed:
-                    return
-                try:
-                    self._sweep_locked()
-                except OSError:
-                    return
 
     def _heartbeat_locked(self, viewer: str | None) -> None:
         if not viewer:
@@ -54,13 +45,6 @@ class Hub:
         player = self.state["agents"].get(viewer)
         if player and player.get("connected", True):
             player["lastSeen"] = orchestra.utc_now()
-
-    def _sweep_locked(self) -> None:
-        before = self.state["seq"]
-        orchestra.sweep(self.state)
-        if self.state["seq"] != before:
-            self._save()
-            self.cond.notify_all()
 
     def _load(self) -> None:
         token_path = self.data_dir / TOKEN_NAME
@@ -105,7 +89,6 @@ class Hub:
     def update(self, fn):
         with self.cond:
             self._heartbeat_locked(getattr(self._caller, "viewer", None))
-            self._sweep_locked()
             result = fn(self.state)
             self._save()
             self.cond.notify_all()
@@ -114,7 +97,6 @@ class Hub:
     def view(self, viewer: str | None) -> dict:
         with self.cond:
             self._heartbeat_locked(viewer)
-            self._sweep_locked()
             reveal = bool(viewer) and viewer == self.state.get("conductor")
             events = [
                 {
@@ -139,7 +121,6 @@ class Hub:
         deadline = time.monotonic() + timeout
         with self.cond:
             self._heartbeat_locked(viewer)
-            self._sweep_locked()
             while True:
                 visible = [
                     event
@@ -254,14 +235,14 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             if path == "/":
-                self._send_file(WEB_ROOT / "index.html", "text/html; charset=utf-8")
+                self._send_file(web_root() / "index.html", "text/html; charset=utf-8")
                 return
             if path.startswith("/assets/"):
                 rel = path[len("/assets/") :]
                 if not rel or ".." in Path(rel).parts:
                     self._send(404, {"error": "Not found."})
                     return
-                asset_root = (WEB_ROOT / "assets").resolve()
+                asset_root = (web_root() / "assets").resolve()
                 target = (asset_root / rel).resolve()
                 if not target.is_relative_to(asset_root) or not target.is_file():
                     self._send(404, {"error": "Not found."})
@@ -339,6 +320,18 @@ class Handler(BaseHTTPRequestHandler):
             self.hub.update(lambda state: orchestra.leave(state, viewer))
         elif path == "/v1/conduct":
             self.hub.update(lambda state: orchestra.conduct(state, viewer, successor=payload.get("player") or None))
+        elif path == "/v1/project":
+            self.hub.update(lambda state: orchestra.set_project(state, viewer, payload.get("name") or ""))
+        elif path == "/v1/source":
+            self.hub.update(lambda state: orchestra.choose_source(state, viewer, payload.get("seat") or ""))
+        elif path == "/v1/source-ready":
+            self.hub.update(lambda state: orchestra.mark_source_ready(state, viewer))
+        elif path == "/v1/source-path":
+            self.hub.update(lambda state: orchestra.publish_source(state, viewer, payload.get("path") or ""))
+        elif path == "/v1/lock":
+            self.hub.update(lambda state: orchestra.claim_file(state, viewer, payload.get("path") or ""))
+        elif path == "/v1/unlock":
+            self.hub.update(lambda state: orchestra.release_file(state, viewer, payload.get("path") or ""))
         elif path == "/v1/plan":
             self.hub.update(lambda state: orchestra.publish_plan(state, viewer, payload))
         elif path == "/v1/say":

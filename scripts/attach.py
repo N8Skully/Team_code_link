@@ -51,7 +51,14 @@ class AttachHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self) -> None:  # noqa: N802
-        if url_path(self.path) != "/attach":
+        path = url_path(self.path)
+        if path == "/lock":
+            self._proxy_lock("/v1/lock")
+            return
+        if path == "/unlock":
+            self._proxy_lock("/v1/unlock")
+            return
+        if path != "/attach":
             self._send(404, {"error": "Not found."})
             return
         length = int(self.headers.get("Content-Length", "0") or "0")
@@ -86,6 +93,26 @@ class AttachHandler(BaseHTTPRequestHandler):
             self._send(400, {"error": str(exc)})
             return
         self._send(200, {"agent": saved.get("agent"), "skills": skills})
+
+    def _proxy_lock(self, route: str) -> None:
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        if length > 100_000:
+            self._send(400, {"error": "That request is too large."})
+            return
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            self._send(400, {"error": "Send JSON."})
+            return
+        if not isinstance(payload, dict):
+            self._send(400, {"error": "Send a JSON object."})
+            return
+        try:
+            text = liveclient.post(route, {"path": str(payload.get("path") or "")})
+        except OrchestraError as exc:
+            self._send(400, {"error": str(exc)})
+            return
+        self._send(200, {"text": text})
 
 
 def url_path(raw: str) -> str:
