@@ -72,8 +72,8 @@ def _python() -> str:
     raise OrchestraError("Python is required on this computer so the agent can open the room.")
 
 
-def install_mcp(folder: Path, key: str) -> None:
-    """Write the room tools into the project the agent will open."""
+def _bridge(folder: Path) -> Path:
+    """Copy the room tools into the project and return the server script."""
     source = _script_dir()
     bridge = folder / ".cursor" / "team-link"
     bridge.mkdir(parents=True, exist_ok=True)
@@ -82,11 +82,22 @@ def install_mcp(folder: Path, key: str) -> None:
         if not origin.is_file():
             raise OrchestraError("The room tools for the agent are missing from this program.")
         shutil.copyfile(origin, bridge / name)
-    mcp_path = folder / ".cursor" / "mcp.json"
+    return bridge / "mcp_server.py"
+
+
+def _mcp_entry(script: Path, key: str, folder: Path) -> dict:
+    return {
+        "command": _python(),
+        "args": [str(script)],
+        "env": {"TEAM_LINK_AGENT": key, "TEAM_LINK_ROOT": str(folder.resolve())},
+    }
+
+
+def _write_mcp_json(path: Path, script: Path, key: str, folder: Path) -> None:
     data: dict = {}
-    if mcp_path.is_file():
+    if path.is_file():
         try:
-            loaded = json.loads(mcp_path.read_text(encoding="utf-8"))
+            loaded = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(loaded, dict):
                 data = loaded
         except json.JSONDecodeError:
@@ -94,16 +105,83 @@ def install_mcp(folder: Path, key: str) -> None:
     servers = data.get("mcpServers")
     if not isinstance(servers, dict):
         servers = {}
-    servers["team-code-link"] = {
-        "command": _python(),
-        "args": [str(bridge / "mcp_server.py")],
-        "env": {
-            "TEAM_LINK_AGENT": key,
-            "TEAM_LINK_ROOT": str(folder.resolve()),
-        },
-    }
+    servers["team-code-link"] = _mcp_entry(script, key, folder)
     data["mcpServers"] = servers
-    mcp_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def _toml_quote(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _write_codex(folder: Path, script: Path, key: str) -> None:
+    """ChatGPT's coding program reads MCP servers from .codex/config.toml."""
+    path = folder / ".codex" / "config.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if "[mcp_servers.team-code-link]" in current:
+        return
+    block = (
+        "\n[mcp_servers.team-code-link]\n"
+        f"command = {_toml_quote(_python())}\n"
+        f"args = [{_toml_quote(str(script))}]\n"
+        "enabled = true\n\n"
+        "[mcp_servers.team-code-link.env]\n"
+        f"TEAM_LINK_AGENT = {_toml_quote(key)}\n"
+        f"TEAM_LINK_ROOT = {_toml_quote(str(folder.resolve()))}\n"
+    )
+    if current and not current.endswith("\n"):
+        current += "\n"
+    path.write_text(current + block, encoding="utf-8")
+
+
+def _write_hermes(script: Path, key: str, folder: Path, home: Path | None = None) -> None:
+    """Hermes reads mcp_servers from its config.yaml."""
+    path = (home or Path.home()) / ".hermes" / "config.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if "team-code-link:" in current:
+        return
+    block = (
+        "  team-code-link:\n"
+        f"    command: {_toml_quote(_python())}\n"
+        f"    args: [{_toml_quote(str(script))}]\n"
+        "    enabled: true\n"
+        "    env:\n"
+        f"      TEAM_LINK_AGENT: {_toml_quote(key)}\n"
+        f"      TEAM_LINK_ROOT: {_toml_quote(str(folder.resolve()))}\n"
+    )
+    if "mcp_servers:" in current:
+        lines = current.splitlines(keepends=True)
+        written: list[str] = []
+        inserted = False
+        for line in lines:
+            written.append(line)
+            if not inserted and line.startswith("mcp_servers:"):
+                written.append(block)
+                inserted = True
+        path.write_text("".join(written), encoding="utf-8")
+        return
+    if current and not current.endswith("\n"):
+        current += "\n"
+    path.write_text(current + "mcp_servers:\n" + block, encoding="utf-8")
+
+
+def install_mcp(folder: Path, key: str, agent: str = "cursor", home: Path | None = None) -> None:
+    """Write the room tools for the agent that is about to start."""
+    script = _bridge(folder)
+    if agent == "claude":
+        _write_mcp_json(folder / ".mcp.json", script, key, folder)
+    elif agent == "chatgpt":
+        _write_codex(folder, script, key)
+    elif agent == "hermes":
+        _write_hermes(script, key, folder, home)
+    elif agent == "cursor":
+        _write_mcp_json(folder / ".cursor" / "mcp.json", script, key, folder)
+    else:
+        _write_mcp_json(folder / ".cursor" / "mcp.json", script, key, folder)
+        _write_mcp_json(folder / ".mcp.json", script, key, folder)
 
 
 def cursor_launch(base: list[str], folder: Path, prompt: str) -> list[str]:
@@ -140,13 +218,88 @@ def _cursor_base() -> list[str] | None:
     return None
 
 
+def _command(names: list[str], extra: list[Path] | None = None) -> list[str] | None:
+    for name in names:
+        found = shutil.which(name)
+        if found:
+            return [found]
+    for path in extra or []:
+        if path.is_file():
+            return [str(path)]
+    return None
+
+
+def _codex_base() -> list[str] | None:
+    script = Path(os.environ.get("APPDATA") or "") / "npm" / "node_modules" / "@openai" / "codex" / "bin" / "codex.js"
+    node = shutil.which("node")
+    if script.is_file() and node:
+        return [node, str(script)]
+    return _command(["codex", "chatgpt"])
+
+
+def _hermes_base() -> list[str] | None:
+    local = Path(os.environ.get("LOCALAPPDATA") or "") / "hermes" / "bin" / "hermes.exe"
+    return _command(["hermes"], [local])
+
+
+def _claude_base() -> list[str] | None:
+    local = Path.home() / ".local" / "bin" / "claude.exe"
+    return _command(["claude"], [local])
+
+
 def _program(agent: str) -> list[str] | None:
     if agent == "cursor":
         return _cursor_base()
-    found = shutil.which(agent)
-    if found:
-        return [found]
-    return None
+    if agent == "claude":
+        return _claude_base()
+    if agent == "chatgpt":
+        return _codex_base()
+    if agent == "hermes":
+        return _hermes_base()
+    return _command([agent])
+
+
+def known_agents() -> list[dict]:
+    """The agents the Agent tab can start, and whether each program is on this computer."""
+    return [
+        {
+            "id": "cursor",
+            "title": "Cursor",
+            "installed": _cursor_base() is not None,
+            "how": "Install Cursor from cursor.com and sign in once. Connect starts Cursor's agent in the project folder.",
+        },
+        {
+            "id": "claude",
+            "title": "Claude",
+            "installed": _claude_base() is not None,
+            "how": "Install Claude Code so the claude command exists. Connect starts that program in the project folder.",
+        },
+        {
+            "id": "chatgpt",
+            "title": "ChatGPT",
+            "installed": _codex_base() is not None,
+            "how": "Install OpenAI's Codex program so the codex command exists. Connect starts it as the ChatGPT agent.",
+        },
+        {
+            "id": "hermes",
+            "title": "Hermes",
+            "installed": _hermes_base() is not None,
+            "how": "Install Hermes so the hermes command exists. Connect starts Hermes in the project folder.",
+        },
+    ]
+
+
+def launch_argv(agent: str, base: list[str], folder: Path, prompt: str) -> list[str]:
+    """Arguments that start one named agent in the project folder."""
+    if agent == "cursor":
+        return cursor_launch(base, folder, prompt)
+    if agent == "claude":
+        return [*base, "-p", "--permission-mode", "bypassPermissions", prompt]
+    if agent == "chatgpt":
+        return [*base, "exec", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", prompt]
+    if agent == "hermes":
+        return [*base, "chat", "--oneshot", "-q", prompt]
+    return [*base, prompt]
 
 
 def connect_agent(key: str, folder: Path, prompt: str | None = None) -> dict:
@@ -160,15 +313,18 @@ def connect_agent(key: str, folder: Path, prompt: str | None = None) -> dict:
     _key = key
     folder = bind_folder(folder)
     os.environ["TEAM_LINK_AGENT"] = key
+    agent_name = key.split("/", 1)[1] if "/" in key else key
     try:
-        install_mcp(folder, key)
+        install_mcp(folder, key, agent_name)
     except OrchestraError as exc:
         _error = str(exc)
         return status()
-    agent_name = key.split("/", 1)[1] if "/" in key else key
     base = _program(agent_name)
     if base is None:
-        _error = f"The {agent_name} program is not installed on this computer."
+        guide = next((item["how"] for item in known_agents() if item["id"] == agent_name), "")
+        if not guide:
+            guide = f"Install a program whose command is {agent_name}, then connect again."
+        _error = f"The {agent_name} program is not installed on this computer. {guide}"
         return status()
     text = prompt or (
         f"You are {key} in Team Code Link. "
@@ -177,7 +333,7 @@ def connect_agent(key: str, folder: Path, prompt: str | None = None) -> dict:
         "Then call listen and answer when the conductor or a teammate speaks. "
         "Work only in this folder."
     )
-    command = cursor_launch(base, folder, text) if agent_name == "cursor" else [*base, text]
+    command = launch_argv(agent_name, base, folder, text)
     log_path = share.app_dir() / "agent-session.log"
     _log_handle = log_path.open("a", encoding="utf-8")
     _process = subprocess.Popen(

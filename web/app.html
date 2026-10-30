@@ -63,7 +63,16 @@
     </label>
     <label id="project-label">Project<input id="project" value="Shared" autocomplete="off"></label>
     <label>Computer<input id="seat" autocomplete="off"></label>
-    <label>Agent<input id="agent" value="cursor" autocomplete="off"></label>
+    <label>Agent
+      <select id="agent">
+        <option value="cursor">Cursor</option>
+        <option value="claude">Claude</option>
+        <option value="chatgpt">ChatGPT</option>
+        <option value="hermes">Hermes</option>
+        <option value="other">Another program</option>
+      </select>
+    </label>
+    <label id="agent-other-label" hidden>Program name<input id="agent-other" autocomplete="off" placeholder="The command name, such as gemini"></label>
     <label>Project lives
       <select id="place">
         <option value="tailscale">On this computer, shared with Tailscale</option>
@@ -84,8 +93,19 @@
   <section id="agent-tab">
     <h1>Agent</h1>
     <p id="agent-status">Not connected.</p>
+    <p>Pick the program this computer should start. Connect puts that program in the room and starts it in the project folder.</p>
     <label>Computer<input id="a-seat" autocomplete="off"></label>
-    <label>Agent<input id="a-agent" value="cursor" autocomplete="off"></label>
+    <label>Agent
+      <select id="a-agent">
+        <option value="cursor">Cursor</option>
+        <option value="claude">Claude</option>
+        <option value="chatgpt">ChatGPT</option>
+        <option value="hermes">Hermes</option>
+        <option value="other">Another program</option>
+      </select>
+    </label>
+    <label id="a-other-label" hidden>Program name<input id="a-other" autocomplete="off" placeholder="The command name, such as gemini"></label>
+    <p id="agent-how"></p>
     <button id="connect" type="button">Connect</button>
     <p id="agent-error" class="error"></p>
   </section>
@@ -93,7 +113,16 @@
     <h1>Settings</h1>
     <p>These are the saved connection, agent, and project values.</p>
     <label>Computer<input id="s-seat" autocomplete="off"></label>
-    <label>Agent<input id="s-agent" value="cursor" autocomplete="off"></label>
+    <label>Agent
+      <select id="s-agent">
+        <option value="cursor">Cursor</option>
+        <option value="claude">Claude</option>
+        <option value="chatgpt">ChatGPT</option>
+        <option value="hermes">Hermes</option>
+        <option value="other">Another program</option>
+      </select>
+    </label>
+    <label id="s-other-label" hidden>Program name<input id="s-other" autocomplete="off"></label>
     <label>Project<input id="s-project" value="Shared" autocomplete="off"></label>
     <label>Host or join
       <select id="s-role">
@@ -153,6 +182,58 @@ role.addEventListener("change", applyRole);
 place.addEventListener("change", applyRole);
 applyRole();
 
+let latest = {};
+
+function otherParts(id) {
+  if (id === "agent") return ["agent-other-label", "agent-other"];
+  if (id === "a-agent") return ["a-other-label", "a-other"];
+  return ["s-other-label", "s-other"];
+}
+
+function showAgentChoice(id) {
+  const parts = otherParts(id);
+  document.getElementById(parts[0]).hidden = document.getElementById(id).value !== "other";
+}
+
+function agentValue(id) {
+  const select = document.getElementById(id);
+  if (select.value !== "other") return select.value;
+  return document.getElementById(otherParts(id)[1]).value.trim();
+}
+
+function setAgentValue(id, name) {
+  const select = document.getElementById(id);
+  const known = [...select.options].some((option) => option.value === name);
+  if (known && name !== "other") select.value = name;
+  else {
+    select.value = "other";
+    document.getElementById(otherParts(id)[1]).value = name || "";
+  }
+  showAgentChoice(id);
+}
+
+function agentHow() {
+  const chosen = document.getElementById("a-agent").value;
+  const note = document.getElementById("agent-how");
+  if (chosen === "other") {
+    note.textContent = "Type the command name of the program to start. Connect looks for that command on this computer.";
+    return;
+  }
+  const item = (latest.agents || []).find((agent) => agent.id === chosen);
+  if (!item) {
+    note.textContent = "";
+    return;
+  }
+  note.textContent = (item.installed ? "Installed on this computer. " : "Not installed on this computer yet. ") + item.how;
+}
+
+["agent", "a-agent", "s-agent"].forEach((id) => {
+  document.getElementById(id).addEventListener("change", () => {
+    showAgentChoice(id);
+    if (id === "a-agent") agentHow();
+  });
+});
+
 async function pickInto(id) {
   if (!window.pywebview) return;
   const picked = await window.pywebview.api.pick_folder();
@@ -172,7 +253,7 @@ function payloadFrom(prefix) {
   return {
     host: (useSettings ? document.getElementById("s-role").value : role.value) === "host" ? "1" : "",
     seat: document.getElementById(useSettings ? "s-seat" : "a-seat").value.trim() || document.getElementById("seat").value.trim(),
-    agent: document.getElementById(useSettings ? "s-agent" : "a-agent").value.trim() || "cursor",
+    agent: agentValue(useSettings ? "s-agent" : "a-agent") || "cursor",
     project: document.getElementById(useSettings ? "s-project" : "project").value.trim() || "Shared",
     place: document.getElementById(useSettings ? "s-place" : "place").value,
     folder: document.getElementById(useSettings ? "s-folder" : "folder").value.trim(),
@@ -220,7 +301,12 @@ function fill(data) {
     document.getElementById("a-seat").value = data.seat;
     document.getElementById("s-seat").value = data.seat;
   }
-  ["agent", "project", "place", "folder", "github"].forEach((name) => {
+  if (saved.agent) {
+    setAgentValue("agent", saved.agent);
+    setAgentValue("a-agent", saved.agent);
+    setAgentValue("s-agent", saved.agent);
+  }
+  ["project", "place", "folder", "github"].forEach((name) => {
     if (!saved[name]) return;
     const primary = document.getElementById(name);
     const agentField = document.getElementById("a-" + name);
@@ -333,6 +419,7 @@ async function instruct(task, text, send) {
 async function refresh() {
   const response = await fetch("/desk");
   const data = await response.json();
+  latest = data;
   showTailscale(data.tailscale || {});
   if (data.invite) {
     document.getElementById("invite").value = data.invite;
@@ -341,6 +428,7 @@ async function refresh() {
   }
   fill(data);
   drawSkills(data);
+  agentHow();
   showRoom(data);
 }
 
@@ -357,10 +445,10 @@ async function connect(fromAgent) {
   error.textContent = "";
   agentNote.textContent = "";
   const seat = document.getElementById(fromAgent ? "a-seat" : "seat").value.trim();
-  const agent = document.getElementById(fromAgent ? "a-agent" : "agent").value.trim() || "cursor";
+  const agent = agentValue(fromAgent ? "a-agent" : "agent") || "cursor";
   if (!fromAgent) {
     document.getElementById("a-seat").value = seat;
-    document.getElementById("a-agent").value = agent;
+    setAgentValue("a-agent", agent);
   }
   let response;
   try {
@@ -406,7 +494,7 @@ document.getElementById("save").addEventListener("click", async () => {
     body: JSON.stringify({
       role: document.getElementById("s-role").value,
       seat: document.getElementById("s-seat").value.trim(),
-      agent: document.getElementById("s-agent").value.trim(),
+      agent: agentValue("s-agent"),
       project: document.getElementById("s-project").value.trim(),
       place: document.getElementById("s-place").value,
       github: document.getElementById("s-github").value.trim(),
