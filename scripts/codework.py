@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -23,6 +24,7 @@ def _git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProc
         encoding="utf-8",
         errors="replace",
         capture_output=True,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
     if check and result.returncode != 0:
         detail = (result.stderr or result.stdout or "git failed").strip()

@@ -99,6 +99,36 @@ class SourceTests(unittest.TestCase):
         missing = share.read_tailscale(False, 1, "", "NATE-PC")
         self.assertIn("download", missing["loginUrl"])
 
+    def test_an_unknown_computer_name_uses_the_tailscale_address(self) -> None:
+        self.assertEqual(share.share_host("UNKNOWN", "100.1.2.3"), "100.1.2.3")
+        self.assertEqual(share.share_host("office", "100.1.2.3"), "office")
+
+    def test_the_room_link_follows_the_project_folder(self) -> None:
+        import os
+        import tempfile
+
+        import liveclient
+
+        with tempfile.TemporaryDirectory() as raw:
+            previous = os.environ.get("TEAM_LINK_ROOT")
+            os.environ["TEAM_LINK_ROOT"] = raw
+            try:
+                self.assertEqual(liveclient.repo_root(), Path(raw).resolve())
+            finally:
+                if previous is None:
+                    os.environ.pop("TEAM_LINK_ROOT", None)
+                else:
+                    os.environ["TEAM_LINK_ROOT"] = previous
+
+    def test_the_cursor_agent_starts_in_the_project_folder(self) -> None:
+        import agent_listen
+
+        command = agent_listen.cursor_launch(["node", "index.js"], Path("C:/work/Shared"), "hello")
+        self.assertIn("--workspace", command)
+        self.assertIn("--approve-mcps", command)
+        self.assertEqual(command[command.index("--workspace") + 1], "C:\\work\\Shared")
+        self.assertEqual(command[-1], "hello")
+
 
 if __name__ == "__main__":
     unittest.main()

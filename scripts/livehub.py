@@ -22,6 +22,7 @@ def web_root() -> Path:
     return Path(__file__).resolve().parents[1] / "web"
 
 TOKEN_NAME = "room.token"
+HOST_TOKEN_NAME = "host.token"
 STATE_NAME = "room.json"
 
 
@@ -31,6 +32,7 @@ class Hub:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.cond = threading.Condition()
         self.room_token = ""
+        self.host_token = ""
         self.state = orchestra.empty_state()
         self._closed = False
         self._caller = threading.local()
@@ -54,6 +56,12 @@ class Hub:
         if not self.room_token:
             self.room_token = secrets.token_urlsafe(24)
             token_path.write_text(self.room_token + "\n", encoding="utf-8")
+        host_path = self.data_dir / HOST_TOKEN_NAME
+        if host_path.exists():
+            self.host_token = host_path.read_text(encoding="utf-8").strip()
+        if not self.host_token:
+            self.host_token = secrets.token_urlsafe(24)
+            host_path.write_text(self.host_token + "\n", encoding="utf-8")
         if state_path.exists():
             loaded = json.loads(state_path.read_text(encoding="utf-8"))
             if isinstance(loaded, dict) and loaded.get("version") == 1:
@@ -76,6 +84,10 @@ class Hub:
         if not token or not self.room_token:
             return False
         return secrets.compare_digest(token, self.room_token)
+
+    def is_host(self, token: str) -> bool:
+        """The host token stays in the host's data folder. The share link does not carry it."""
+        return bool(token) and bool(self.host_token) and secrets.compare_digest(token, self.host_token)
 
     def player_key(self, agent_token: str) -> str | None:
         if not agent_token:
@@ -292,8 +304,19 @@ class Handler(BaseHTTPRequestHandler):
                 player = str(payload.get("player") or "").strip()
                 if not player:
                     raise orchestra.OrchestraError("Name the player to remove, such as home/cursor.")
-                self.hub.update(lambda state: orchestra.leave(state, player, removed=True))
-                self._send(200, self.hub.view(self._viewer()))
+                caller = self._viewer()
+                host = self.hub.is_host(self.headers.get("X-Host-Token", "").strip())
+
+                def drop(state: dict) -> None:
+                    if not host:
+                        if not caller:
+                            raise orchestra.OrchestraError("Log in as an agent before removing a seat.")
+                        if caller != player and caller != state.get("conductor"):
+                            raise orchestra.OrchestraError("Only that player, the conductor, or the host can remove this seat.")
+                    orchestra.leave(state, player, removed=True)
+
+                self.hub.update(drop)
+                self._send(200, self.hub.view(caller))
                 return
             viewer = self._viewer()
             self._caller_set(viewer)
@@ -353,6 +376,8 @@ class Handler(BaseHTTPRequestHandler):
                     payload.get("approach") or None,
                 )
             )
+        elif path == "/v1/complete":
+            self.hub.update(lambda state: orchestra.complete(state, viewer, payload.get("task", "")))
         elif path == "/v1/help":
             self.hub.update(lambda state: orchestra.help_on(state, viewer, payload.get("task", "")))
         elif path == "/v1/partition":
@@ -463,9 +488,10 @@ def describe_links(server: ThreadingHTTPServer, public_url: str | None = None) -
     return "\n".join(lines)
 
 
-def serve_forever(host: str, port: int, data_dir: Path, public_url: str | None = None) -> None:
+def serve_forever(host: str, port: int, data_dir: Path, public_url: str | None = None, quiet: bool = False) -> None:
     server = make_server(host, port, data_dir)
-    print(describe_links(server, public_url), flush=True)
+    if not quiet:
+        print(describe_links(server, public_url), flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -7,8 +7,13 @@ hidden = [
     "attach",
     "skills",
     "share",
+    "agent_listen",
     "source_loop",
     "workspace",
+    "webview",
+    "bottle",
+    "pythonnet",
+    "clr_loader",
     "codework",
     "boundary",
 ]
@@ -20,6 +25,9 @@ a = Analysis(
     datas=[
         ("web", "web"),
         ("scripts/open_tunnel.ps1", "scripts"),
+        ("scripts/mcp_server.py", "scripts"),
+        ("scripts/liveclient.py", "scripts"),
+        ("scripts/orchestra.py", "scripts"),
     ],
     hiddenimports=hidden,
     hookspath=[],
@@ -40,6 +48,6 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
 )

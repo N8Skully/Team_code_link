@@ -9,7 +9,6 @@ import subprocess
 import sys
 import threading
 import time
-import webbrowser
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -17,8 +16,10 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 import attach
+import agent_listen
 import liveclient
 import livehub
+import share
 import source_loop
 import workspace
 from orchestra import OrchestraError
@@ -39,8 +40,9 @@ def start_tunnel(port: int) -> str:
     if not script.is_file():
         raise OrchestraError("The tunnel script is missing from this program.")
     result = subprocess.run(
-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script), "-Port", str(port)],
+        ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", str(script), "-Port", str(port)],
         check=False,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
     if result.returncode != 0:
         raise OrchestraError("The internet link did not start.")
@@ -58,17 +60,36 @@ def stop_tunnel() -> None:
         return
     pid = pid_file.read_text(encoding="utf-8").strip()
     if pid.isdigit():
-        subprocess.run(["taskkill", "/PID", pid, "/F"], check=False, capture_output=True)
+        subprocess.run(
+            ["taskkill", "/PID", pid, "/F"],
+            check=False,
+            capture_output=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
     pid_file.unlink(missing_ok=True)
     url_file = temp / "team-code-link-tunnel.url"
     if url_file.exists():
         url_file.unlink(missing_ok=True)
 
 
-def open_login(room_url: str) -> None:
-    from urllib.parse import quote
+def show_app() -> None:
+    import webview
 
-    webbrowser.open("http://127.0.0.1:8770/?room=" + quote(room_url, safe=""))
+    class WindowApi:
+        def pick_folder(self) -> str:
+            if not webview.windows:
+                return ""
+            kind = getattr(webview, "FOLDER_DIALOG", None)
+            if kind is None:
+                kind = webview.FileDialog.FOLDER
+            chosen = webview.windows[0].create_file_dialog(kind)
+            if not chosen:
+                return ""
+            return str(chosen[0])
+
+    webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = False
+    webview.create_window("Team Code Link", "http://127.0.0.1:8770/", width=680, height=900, js_api=WindowApi())
+    webview.start()
 
 
 def wait_for_login() -> None:
@@ -87,6 +108,7 @@ def serve_in_thread(host: str, port: int, data_dir: Path, public_url: str | None
     thread = threading.Thread(
         target=livehub.serve_forever,
         args=(host, port, data_dir, public_url),
+        kwargs={"quiet": True},
         daemon=True,
         name="team-link-room",
     )
@@ -105,48 +127,79 @@ def wait_for_token(data_dir: Path) -> str:
     raise OrchestraError("The room did not write its token.")
 
 
-def run_host(port: int, local: bool, public_url: str | None) -> int:
-    root = liveclient.repo_root()
-    data_dir = workspace.hub_dir(root, None)
-    if not local and not public_url and os.name == "nt":
-        public_url = start_tunnel(port)
-    server = serve_in_thread("0.0.0.0", port, data_dir, public_url)
+_host_started = False
+
+
+def begin_host(port: int = 8765) -> str:
+    """Start the room when the person chooses Host, and return the short room code."""
+    global _host_started
+    import secrets
+
+    data = app_home() / "room"
+    data.mkdir(parents=True, exist_ok=True)
+    token_file = data / "room.token"
+    code = token_file.read_text(encoding="utf-8").strip() if token_file.is_file() else ""
+    if not code or len(code) > 12 or "://" in code:
+        alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        code = "".join(secrets.choice(alphabet) for _ in range(8))
+        token_file.write_text(code + "\n", encoding="utf-8")
+    if not _host_started:
+        serve_in_thread("0.0.0.0", port, data, None)
+        wait_for_token(data)
+        for _ in range(30):
+            if _room_answers(port, code):
+                _host_started = True
+                break
+            time.sleep(0.1)
+        if not _host_started:
+            raise OrchestraError(
+                "The room did not start. Close any other Team Code Link window, then choose Host and share again."
+            )
+    liveclient.link_room(f"http://127.0.0.1:{port}/?token={code}")
+    attach.set_invite(code)
+    return code
+
+
+attach.begin_host = begin_host
+
+
+def _room_answers(port: int, code: str) -> bool:
+    import urllib.request
+
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}/v1/score",
+        headers={"Authorization": f"Bearer {code}", "Accept": "application/json"},
+    )
     try:
-        token = wait_for_token(data_dir)
-        local_url = f"http://127.0.0.1:{port}/?token={token}"
-        liveclient.link_room(local_url, root=root)
-        threading.Thread(target=attach.serve, daemon=True, name="team-link-attach").start()
-        threading.Thread(target=source_loop.loop, args=(root,), daemon=True, name="team-link-source").start()
-        wait_for_login()
-        open_login(f"http://127.0.0.1:{port}/")
-        while server.is_alive():
-            time.sleep(0.5)
-        return 0
-    finally:
-        stop_tunnel()
+        with urllib.request.urlopen(request, timeout=0.5) as response:
+            return response.status == 200
+    except OSError:
+        return False
 
 
-def run_join(url: str) -> int:
-    root = liveclient.repo_root()
-    if url:
-        print(liveclient.link_room(url, root=root))
-    else:
-        try:
-            liveclient.load_link(root)
-        except OrchestraError as exc:
-            raise OrchestraError("Paste the share link: Team Code Link.exe --join https://the-link/?token=...") from exc
+def use_saved_project() -> None:
+    folder = str(share.load_settings().get("folder") or "").strip()
+    if folder and Path(folder).is_dir():
+        os.environ["TEAM_LINK_ROOT"] = str(Path(folder).resolve())
+
+
+def run_window() -> int:
+    use_saved_project()
     threading.Thread(target=attach.serve, daemon=True, name="team-link-attach").start()
-    threading.Thread(target=source_loop.loop, args=(root,), daemon=True, name="team-link-source").start()
-    link = liveclient.load_link(root)
+    threading.Thread(target=source_loop.loop, daemon=True, name="team-link-source").start()
+    threading.Thread(target=agent_listen.loop, daemon=True, name="team-link-listen").start()
     wait_for_login()
-    open_login(link["url"] + "/")
-    print("Leave this window open. Closing it stops the agent connection on this computer.")
-    try:
-        while True:
-            time.sleep(0.5)
-    except KeyboardInterrupt:
-        print("\nStopped.")
-        return 0
+    show_app()
+    return 0
+
+
+def app_home() -> Path:
+    """The frozen program keeps its room next to the user, not inside a git checkout."""
+    if getattr(sys, "frozen", False):
+        home = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "Team Code Link"
+        home.mkdir(parents=True, exist_ok=True)
+        return home
+    return Path.cwd()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -156,12 +209,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--public-url")
     args = parser.parse_args(argv)
+    os.environ["TEAM_LINK_APP"] = "1"
     if getattr(sys, "frozen", False):
-        os.chdir(Path(sys.executable).resolve().parent)
+        os.chdir(app_home())
     try:
-        if args.join is not None:
-            return run_join(args.join)
-        return run_host(args.port, args.local, args.public_url)
+        return run_window()
     except OrchestraError as exc:
         print(exc, file=sys.stderr)
         return 1

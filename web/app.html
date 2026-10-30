@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team Code Link</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; min-height: 100vh; background: #07060c; color: #f6f1ff; font: 15px/1.45 "Segoe UI", sans-serif; }
+  header.bar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; padding: 12px 16px; background: #120e18; border-bottom: 1px solid rgba(186, 140, 255, 0.45); position: sticky; top: 0; }
+  header.bar span { color: #b7a9c9; }
+  header.bar strong { color: #f6f1ff; font-weight: 650; }
+  .ok { color: #b6f3c8; }
+  nav { display: flex; gap: 6px; padding: 10px 16px; border-bottom: 1px solid rgba(186, 140, 255, 0.25); }
+  nav button { background: transparent; color: #b7a9c9; border: 1px solid transparent; }
+  nav button.on { color: #1a1024; background: #c084fc; border-color: #c084fc; }
+  main { padding: 16px; max-width: 820px; }
+  section { display: none; }
+  section.on { display: block; }
+  h1 { margin: 0 0 8px; font-size: 22px; }
+  h2 { margin: 16px 0 6px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #b7a9c9; }
+  p { color: #b7a9c9; }
+  button { display: inline-block; margin-top: 8px; margin-right: 8px; padding: 10px 14px; border-radius: 10px; border: 0; background: #c084fc; color: #1a1024; font: inherit; font-weight: 600; cursor: pointer; }
+  [hidden] { display: none !important; }
+  label { display: block; margin-top: 8px; color: #b7a9c9; font-size: 13px; }
+  input, select, textarea { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(186, 140, 255, 0.55); background: #120e18; color: #f6f1ff; font: inherit; }
+  textarea { min-height: 90px; }
+  .error { color: #ffb4b4; }
+  .card { margin: 10px 0; padding: 12px; border: 1px solid rgba(186, 140, 255, 0.35); border-radius: 12px; }
+  .skill { display: flex; gap: 8px; align-items: center; margin: 6px 0; color: #f6f1ff; }
+</style>
+</head>
+<body>
+<header class="bar">
+  <span id="st-tail">Tailscale …</span>
+  <span>Code <strong id="st-code">—</strong></span>
+  <span>Agent <strong id="st-agent">not connected</strong></span>
+  <span>Source <strong id="st-source">none</strong></span>
+</header>
+<nav>
+  <button type="button" data-tab="connection" class="on">Connection</button>
+  <button type="button" data-tab="agent-tab">Agent</button>
+  <button type="button" data-tab="settings">Settings</button>
+  <button type="button" data-tab="skills">Skills</button>
+  <button type="button" data-tab="live">Live</button>
+</nav>
+<main>
+  <section id="connection" class="on">
+    <h1>Connection</h1>
+    <p id="state" class="wait">Checking Tailscale.</p>
+    <button id="signin" type="button">Sign in with Tailscale</button>
+    <label>This computer
+      <select id="role">
+        <option value="host">Host the room</option>
+        <option value="join">Join a room</option>
+      </select>
+    </label>
+    <label id="join-label" hidden>Room code
+      <input id="join-link" placeholder="AB12CD34" autocomplete="off">
+    </label>
+    <label id="invite-label" hidden>Room code
+      <input id="invite" readonly>
+    </label>
+    <label id="project-label">Project<input id="project" value="Shared" autocomplete="off"></label>
+    <label>Computer<input id="seat" autocomplete="off"></label>
+    <label>Agent<input id="agent" value="cursor" autocomplete="off"></label>
+    <label>Project lives
+      <select id="place">
+        <option value="tailscale">On this computer, shared with Tailscale</option>
+        <option value="github">In a GitHub repo, copied into a folder here</option>
+      </select>
+    </label>
+    <label id="github-label" hidden>GitHub repo
+      <input id="github" placeholder="https://github.com/you/project" autocomplete="off">
+    </label>
+    <label>Folder on this computer
+      <input id="folder" placeholder="Choose where the project files go" autocomplete="off">
+    </label>
+    <button id="browse" type="button">Choose folder</button>
+    <button id="go" type="button">Share this computer</button>
+    <p id="setup-error" class="error"></p>
+    <p id="share-note" class="error"></p>
+  </section>
+  <section id="agent-tab">
+    <h1>Agent</h1>
+    <p id="agent-status">Not connected.</p>
+    <label>Computer<input id="a-seat" autocomplete="off"></label>
+    <label>Agent<input id="a-agent" value="cursor" autocomplete="off"></label>
+    <button id="connect" type="button">Connect</button>
+    <p id="agent-error" class="error"></p>
+  </section>
+  <section id="settings">
+    <h1>Settings</h1>
+    <p>These are the saved connection, agent, and project values.</p>
+    <label>Computer<input id="s-seat" autocomplete="off"></label>
+    <label>Agent<input id="s-agent" value="cursor" autocomplete="off"></label>
+    <label>Project<input id="s-project" value="Shared" autocomplete="off"></label>
+    <label>Host or join
+      <select id="s-role">
+        <option value="host">Host</option>
+        <option value="join">Join</option>
+      </select>
+    </label>
+    <label>Project lives
+      <select id="s-place">
+        <option value="tailscale">This computer over Tailscale</option>
+        <option value="github">GitHub repo</option>
+      </select>
+    </label>
+    <label>GitHub repo<input id="s-github" autocomplete="off"></label>
+    <label>Folder<input id="s-folder" autocomplete="off"></label>
+    <button id="s-browse" type="button">Choose folder</button>
+    <button id="save" type="button">Save</button>
+    <button id="signin-settings" type="button">Sign in with Tailscale</button>
+    <p id="save-note"></p>
+  </section>
+  <section id="skills">
+    <h1>Skills</h1>
+    <p>These are the skills this computer will load. Uncheck any this agent should not bring.</p>
+    <div id="skill-list"></div>
+  </section>
+  <section id="live">
+    <h1>Live</h1>
+    <h2>Agents</h2>
+    <div id="agents"></div>
+    <h2>Talking</h2>
+    <div id="talk"></div>
+    <div id="orders"></div>
+  </section>
+</main>
+<script>
+const role = document.getElementById("role");
+const place = document.getElementById("place");
+const tabs = document.querySelectorAll("nav button");
+tabs.forEach((tab) => tab.addEventListener("click", () => {
+  tabs.forEach((item) => item.classList.remove("on"));
+  document.querySelectorAll("main section").forEach((item) => item.classList.remove("on"));
+  tab.classList.add("on");
+  document.getElementById(tab.dataset.tab).classList.add("on");
+}));
+
+let filled = false;
+let knownSkills = [];
+
+function applyRole() {
+  const joining = role.value === "join";
+  document.getElementById("join-label").hidden = !joining;
+  document.getElementById("project-label").hidden = joining;
+  document.getElementById("go").textContent = joining ? "Join" : "Host and share";
+  document.getElementById("github-label").hidden = place.value !== "github";
+}
+role.addEventListener("change", applyRole);
+place.addEventListener("change", applyRole);
+applyRole();
+
+async function pickInto(id) {
+  if (!window.pywebview) return;
+  const picked = await window.pywebview.api.pick_folder();
+  if (picked) document.getElementById(id).value = picked;
+}
+document.getElementById("browse").addEventListener("click", () => pickInto("folder"));
+document.getElementById("s-browse").addEventListener("click", () => pickInto("s-folder"));
+
+function line(text) {
+  const row = document.createElement("p");
+  row.textContent = text;
+  return row;
+}
+
+function payloadFrom(prefix) {
+  const useSettings = prefix === "s";
+  return {
+    host: (useSettings ? document.getElementById("s-role").value : role.value) === "host" ? "1" : "",
+    seat: document.getElementById(useSettings ? "s-seat" : "a-seat").value.trim() || document.getElementById("seat").value.trim(),
+    agent: document.getElementById(useSettings ? "s-agent" : "a-agent").value.trim() || "cursor",
+    project: document.getElementById(useSettings ? "s-project" : "project").value.trim() || "Shared",
+    place: document.getElementById(useSettings ? "s-place" : "place").value,
+    folder: document.getElementById(useSettings ? "s-folder" : "folder").value.trim(),
+    github: document.getElementById(useSettings ? "s-github" : "github").value.trim(),
+    link: document.getElementById("join-link").value.trim(),
+    skills: checkedSkills()
+  };
+}
+
+function checkedSkills() {
+  return [...document.querySelectorAll("#skill-list input:checked")].map((box) => box.value);
+}
+
+function showTailscale(data) {
+  const state = document.getElementById("state");
+  const signin = document.getElementById("signin");
+  const bar = document.getElementById("st-tail");
+  if (data.connected) {
+    state.className = "ok";
+    state.textContent = "Connected";
+    signin.hidden = true;
+    document.getElementById("signin-settings").hidden = true;
+    bar.innerHTML = "Tailscale <strong class=\"ok\">connected</strong> " + (data.ip || "");
+    return;
+  }
+  state.className = "wait";
+  state.textContent = data.installed ? "Not connected" : "Tailscale is not installed";
+  signin.hidden = false;
+  document.getElementById("signin-settings").hidden = false;
+  signin.textContent = data.installed ? "Sign in with Tailscale" : "Get Tailscale";
+  bar.textContent = "Tailscale not connected";
+}
+
+function fill(data) {
+  if (filled) return;
+  filled = true;
+  const saved = data.settings || {};
+  if (saved.role) role.value = saved.role;
+  if (saved.seat) {
+    document.getElementById("seat").value = saved.seat;
+    document.getElementById("a-seat").value = saved.seat;
+    document.getElementById("s-seat").value = saved.seat;
+  } else if (data.seat) {
+    document.getElementById("seat").value = data.seat;
+    document.getElementById("a-seat").value = data.seat;
+    document.getElementById("s-seat").value = data.seat;
+  }
+  ["agent", "project", "place", "folder", "github"].forEach((name) => {
+    if (!saved[name]) return;
+    const primary = document.getElementById(name);
+    const agentField = document.getElementById("a-" + name);
+    const settingsField = document.getElementById("s-" + name);
+    if (primary) primary.value = saved[name];
+    if (agentField) agentField.value = saved[name];
+    if (settingsField) settingsField.value = saved[name];
+  });
+  if (saved.link) document.getElementById("join-link").value = saved.link;
+  if (saved.role) document.getElementById("s-role").value = saved.role;
+  applyRole();
+}
+
+function drawSkills(data) {
+  const names = data.skills || [];
+  if (names.join() === knownSkills.join()) return;
+  knownSkills = names.slice();
+  const enabled = new Set((data.settings && data.settings.skills) || names);
+  const list = document.getElementById("skill-list");
+  list.replaceChildren();
+  if (!names.length) {
+    list.append(line("No SKILL.md files found on this computer."));
+    return;
+  }
+  names.forEach((name) => {
+    const label = document.createElement("label");
+    label.className = "skill";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = name;
+    box.checked = enabled.has(name);
+    label.append(box, document.createTextNode(name));
+    list.append(label);
+  });
+}
+
+function showRoom(data) {
+  const snapshot = data.snapshot;
+  const agent = data.agent || {};
+  const people = document.getElementById("agents");
+  const talk = document.getElementById("talk");
+  const orders = document.getElementById("orders");
+  people.replaceChildren();
+  talk.replaceChildren();
+  orders.replaceChildren();
+  const shareNote = document.getElementById("share-note");
+  shareNote.textContent = data.shareError || "";
+  if (agent.running && agent.key) {
+    document.getElementById("st-agent").textContent = agent.key;
+    document.getElementById("agent-status").textContent = agent.key + " is running in the project folder.";
+  } else if (snapshot && snapshot.you) {
+    document.getElementById("st-agent").textContent = snapshot.you;
+    document.getElementById("agent-status").textContent = agent.error
+      ? snapshot.you + " is in the room. " + agent.error
+      : snapshot.you + " is in the room. The agent program is not running.";
+  } else {
+    document.getElementById("st-agent").textContent = "not connected";
+    document.getElementById("agent-status").textContent = agent.error || "Not connected.";
+  }
+  const share = (snapshot && snapshot.source) || {};
+  document.getElementById("st-source").textContent = share.path || "none";
+  document.getElementById("st-code").textContent = document.getElementById("invite").value || "—";
+  if (!snapshot) {
+    people.append(line("Connect the agent to enter the room."));
+    talk.append(line("No one has spoken yet."));
+    return;
+  }
+  const locks = {};
+  (snapshot.locks || []).forEach((lock) => { locks[lock.holder] = lock.file; });
+  const members = snapshot.agents || [];
+  if (!members.length) people.append(line("No agents yet."));
+  members.forEach((player) => {
+    const task = (snapshot.tasks || []).find((item) => (item.members || []).includes(player.key) && item.status === "active");
+    const editing = locks[player.key] ? " · editing " + locks[player.key] : "";
+    const part = task ? " · " + task.title : "";
+    people.append(line(player.key + part + editing));
+  });
+  const messages = (snapshot.messages || []).slice(-12);
+  if (!messages.length) talk.append(line("No one has spoken yet."));
+  messages.forEach((message) => talk.append(line(message.agent + ": " + message.text)));
+  if (snapshot.you && snapshot.you === snapshot.conductor) {
+    (snapshot.tasks || []).filter((task) => task.status !== "done").forEach((task) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      const title = document.createElement("h2");
+      title.textContent = task.title;
+      const box = document.createElement("textarea");
+      box.value = task.approach || task.brief || "";
+      const send = document.createElement("button");
+      send.type = "button";
+      send.textContent = "Send";
+      send.addEventListener("click", () => instruct(task.id, box.value, send));
+      card.append(title, box, send);
+      orders.append(card);
+    });
+  }
+}
+
+async function instruct(task, text, send) {
+  send.disabled = true;
+  await fetch("/instruct", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ task, text })
+  });
+  send.disabled = false;
+  refresh().catch(() => {});
+}
+
+async function refresh() {
+  const response = await fetch("/desk");
+  const data = await response.json();
+  showTailscale(data.tailscale || {});
+  if (data.invite) {
+    document.getElementById("invite").value = data.invite;
+    document.getElementById("invite-label").hidden = false;
+    document.getElementById("st-code").textContent = data.invite;
+  }
+  fill(data);
+  drawSkills(data);
+  showRoom(data);
+}
+
+async function signIn() {
+  await fetch("/tailscale/login", { method: "POST" });
+  refresh().catch(() => {});
+}
+document.getElementById("signin").addEventListener("click", signIn);
+document.getElementById("signin-settings").addEventListener("click", signIn);
+
+async function connect(fromAgent) {
+  const error = document.getElementById(fromAgent ? "agent-error" : "setup-error");
+  const agentNote = document.getElementById("agent-error");
+  error.textContent = "";
+  agentNote.textContent = "";
+  const seat = document.getElementById(fromAgent ? "a-seat" : "seat").value.trim();
+  const agent = document.getElementById(fromAgent ? "a-agent" : "agent").value.trim() || "cursor";
+  if (!fromAgent) {
+    document.getElementById("a-seat").value = seat;
+    document.getElementById("a-agent").value = agent;
+  }
+  let response;
+  try {
+    response = await fetch("/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        host: role.value === "host" ? "1" : "",
+        seat: seat || document.getElementById("seat").value.trim(),
+        agent,
+        project: document.getElementById("project").value.trim() || "Shared",
+        place: place.value,
+        folder: document.getElementById("folder").value.trim(),
+        github: document.getElementById("github").value.trim(),
+        link: document.getElementById("join-link").value.trim(),
+        skills: [...document.querySelectorAll("#skill-list input:checked")].map((box) => box.value)
+      })
+    });
+  } catch (problem) {
+    error.textContent = "The app did not answer. Leave this window open and try again.";
+    return;
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) error.textContent = data.error || "Could not connect.";
+  if (data.agentError) agentNote.textContent = data.agentError;
+  if (data.shareError) document.getElementById("share-note").textContent = data.shareError;
+  if (data.code) {
+    document.getElementById("invite").value = data.code;
+    document.getElementById("invite-label").hidden = false;
+    document.getElementById("st-code").textContent = data.code;
+  }
+  refresh().catch(() => {});
+}
+document.getElementById("go").addEventListener("click", () => connect(false));
+document.getElementById("connect").addEventListener("click", () => connect(true));
+
+document.getElementById("save").addEventListener("click", async () => {
+  const note = document.getElementById("save-note");
+  note.textContent = "";
+  const response = await fetch("/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      role: document.getElementById("s-role").value,
+      seat: document.getElementById("s-seat").value.trim(),
+      agent: document.getElementById("s-agent").value.trim(),
+      project: document.getElementById("s-project").value.trim(),
+      place: document.getElementById("s-place").value,
+      github: document.getElementById("s-github").value.trim(),
+      folder: document.getElementById("s-folder").value.trim(),
+      skills: [...document.querySelectorAll("#skill-list input:checked")].map((box) => box.value)
+    })
+  });
+  if (response.ok) note.textContent = "Saved.";
+});
+
+refresh().catch(() => { document.getElementById("state").textContent = "The app is not reachable."; });
+setInterval(() => refresh().catch(() => {}), 2000);
+</script>
+</body>
+</html>
