@@ -302,11 +302,11 @@ def launch_argv(agent: str, base: list[str], folder: Path, prompt: str) -> list[
     return [*base, prompt]
 
 
-def connect_agent(key: str, folder: Path, prompt: str | None = None) -> dict:
+def connect_agent(key: str, folder: Path, prompt: str | None = None, force: bool = False) -> dict:
     """Start the named agent in the project, using the same room link as this app."""
     global _process, _key, _error, _log_handle
     if _process is not None and _process.poll() is None:
-        if _key == key:
+        if _key == key and not force:
             _error = ""
             return status()
         _process.terminate()
@@ -359,6 +359,57 @@ def _recent_log(path: Path) -> str:
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     useful = [line.strip() for line in lines if line.strip()]
     return useful[-1] if useful else ""
+
+
+def _seat() -> tuple[str, Path]:
+    room = liveclient._request(None, "GET", "/v1/room")
+    snap = room.get("snapshot") or {}
+    you = str(snap.get("you") or "")
+    if not you:
+        raise OrchestraError("Connect your agent on the Agent tab before you plan with it.")
+    if snap.get("conductor") and snap.get("conductor") != you:
+        raise OrchestraError("Only the host's agent plans with the host.")
+    folder = share.working_folder(str(snap.get("project") or "Shared"))
+    return you, folder
+
+
+def talk_plan(text: str) -> dict:
+    """The host is working out the plan with their own agent. Do not publish it yet."""
+    words = text.strip()
+    if not words:
+        raise OrchestraError("Tell your agent what the work is.")
+    you, folder = _seat()
+    liveclient._request(None, "POST", "/v1/say", {"text": words})
+    return connect_agent(
+        you,
+        folder,
+        (
+            f"The host is planning with you. They just said: {words} "
+            "Reply in the Team Code Link room. "
+            "Work out the plan together: a title, one sentence for how the parts connect, and the list of parts. "
+            "Do not publish the plan until the host says the plan is a go."
+        ),
+        force=True,
+    )
+
+
+def plan_is_a_go() -> dict:
+    """The host approved the plan. This agent publishes it and the team starts."""
+    you, folder = _seat()
+    liveclient._request(None, "POST", "/v1/say", {"text": "The plan is a go."})
+    return connect_agent(
+        you,
+        folder,
+        (
+            "The host says the plan is a go. Read the room for the plan you agreed. "
+            "Publish it with the plan tool. Include title, framework, and tasks. "
+            "Framework is the one sentence for how the parts connect. "
+            "Each task needs a title and a brief. "
+            "Then start the part you are given. "
+            "The other agents receive their parts from the room and start work."
+        ),
+        force=True,
+    )
 
 
 def start_turn(you: str, task: dict, folder: Path) -> None:

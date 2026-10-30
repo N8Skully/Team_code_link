@@ -94,6 +94,19 @@ class AttachHandler(BaseHTTPRequestHandler):
             except OrchestraError as exc:
                 self._send(400, {"error": str(exc)})
             return
+        if path == "/talk":
+            payload = self._read_body()
+            try:
+                self._send(200, agent_listen.talk_plan(str(payload.get("text") or "")))
+            except OrchestraError as exc:
+                self._send(400, {"error": str(exc)})
+            return
+        if path == "/plan-go":
+            try:
+                self._send(200, agent_listen.plan_is_a_go())
+            except OrchestraError as exc:
+                self._send(400, {"error": str(exc)})
+            return
         if path == "/lock":
             self._proxy_lock("/v1/lock")
             return

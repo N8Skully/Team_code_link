@@ -150,6 +150,14 @@
   </section>
   <section id="live">
     <h1>Live</h1>
+    <div id="plan-box" hidden>
+      <h2>Plan with your agent</h2>
+      <p id="plan-help">Describe the work here. Your agent answers in the room. When the plan is the one you want, click The plan is a go. Your agent sends it to the team, and every agent starts its part.</p>
+      <textarea id="plan-talk" placeholder="What are we building, and how do the parts connect?"></textarea>
+      <button id="plan-send" type="button">Talk</button>
+      <button id="plan-go" type="button">The plan is a go</button>
+      <p id="plan-error" class="error"></p>
+    </div>
     <h2>Agents</h2>
     <div id="agents"></div>
     <h2>Talking</h2>
@@ -354,6 +362,12 @@ function showRoom(data) {
   orders.replaceChildren();
   const shareNote = document.getElementById("share-note");
   shareNote.textContent = data.shareError || "";
+  const planning = snapshot && snapshot.you && snapshot.you === snapshot.conductor;
+  document.getElementById("plan-box").hidden = !planning;
+  document.getElementById("plan-go").hidden = !planning || !!(snapshot && snapshot.plan);
+  document.getElementById("plan-help").textContent = snapshot && snapshot.plan
+    ? "The plan is with the team. Talk here if you want to tell your agent something more."
+    : "Describe the work here. Your agent answers in the room. When the plan is the one you want, click The plan is a go. Your agent sends it to the team, and every agent starts its part.";
   if (agent.running && agent.key) {
     document.getElementById("st-agent").textContent = agent.key;
     document.getElementById("agent-status").textContent = agent.key + " is running in the project folder.";
@@ -404,6 +418,25 @@ function showRoom(data) {
     });
   }
 }
+
+async function planMessage(path, body) {
+  const error = document.getElementById("plan-error");
+  error.textContent = "";
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {})
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) error.textContent = data.error || "Your agent did not get that.";
+  else if (data.error) error.textContent = data.error;
+  refresh().catch(() => {});
+}
+document.getElementById("plan-send").addEventListener("click", () => {
+  const box = document.getElementById("plan-talk");
+  planMessage("/talk", { text: box.value });
+});
+document.getElementById("plan-go").addEventListener("click", () => planMessage("/plan-go", {}));
 
 async function instruct(task, text, send) {
   send.disabled = true;
