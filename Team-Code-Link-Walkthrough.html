@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Team Code Link — full setup walkthrough</title>
+<style>
+  @page { size: letter; margin: 0.7in; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    color: #1c1917;
+    font: 11.5pt/1.5 Georgia, "Times New Roman", serif;
+  }
+  h1 { font: 22pt/1.2 Georgia, serif; margin: 0 0 8px; }
+  h2 {
+    font: 15pt/1.25 Georgia, serif;
+    margin: 28px 0 8px;
+    page-break-after: avoid;
+    border-top: 1px solid #d6d3d1;
+    padding-top: 14px;
+  }
+  h3 { font: 12.5pt/1.3 Georgia, serif; margin: 16px 0 6px; page-break-after: avoid; }
+  p { margin: 0 0 8px; }
+  ol.steps { margin: 8px 0 12px; padding-left: 1.4em; }
+  ol.steps > li { margin: 0 0 10px; page-break-inside: avoid; }
+  ul { margin: 4px 0 8px; padding-left: 1.2em; }
+  li { margin: 0 0 4px; }
+  code, .path {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 10pt;
+    background: #f5f5f4;
+    padding: 0 3px;
+  }
+  pre {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 9.5pt;
+    line-height: 1.4;
+    background: #f5f5f4;
+    padding: 10px 12px;
+    white-space: pre-wrap;
+    page-break-inside: avoid;
+  }
+  .lead { font-size: 12.5pt; }
+  .note, .see, .stop {
+    page-break-inside: avoid;
+    margin: 10px 0;
+    padding: 8px 12px;
+    border-left: 4px solid #57534e;
+    background: #fafaf9;
+  }
+  .see { border-left-color: #3f6212; }
+  .stop { border-left-color: #9f1239; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; page-break-inside: avoid; }
+  th, td { text-align: left; vertical-align: top; border-bottom: 1px solid #e7e5e4; padding: 6px 8px 6px 0; }
+  th { font-size: 10pt; letter-spacing: 0.04em; text-transform: uppercase; color: #57534e; }
+  a { color: #1c1917; }
+</style>
+</head>
+<body>
+
+<h1>Team Code Link</h1>
+<p class="lead">A full walkthrough for people who have not set this up before. Read it from the top. Do the steps in order. One person is the host. Every other person follows the join steps on their own computer.</p>
+<p>When you are done, up to six Windows computers can see one shared project folder, sit in one private room, and each start a Cursor agent that can hear that room.</p>
+
+<h2>1. The words this guide uses</h2>
+<p>These words show up on the screen. Here is what each one means in this program.</p>
+<table>
+  <tr><th>Word</th><th>What it means</th></tr>
+  <tr><td>Computer</td><td>One physical PC. In the room it has a short name you choose, such as <code>nate</code> or <code>office</code>. That name is the seat.</td></tr>
+  <tr><td>Agent</td><td>A program that writes code. This guide uses Cursor’s agent. It is a separate program from the chat window already open in Cursor. Connecting puts that program into the room. It does not attach the chat you are reading right now.</td></tr>
+  <tr><td>Room</td><td>A private list of who is here, what they said, and which part of the work they are on. It runs on the host computer. It is not a website on the public internet.</td></tr>
+  <tr><td>Room code</td><td>Eight letters and numbers, such as <code>AB12CD34</code>. It is the password for this room. The host reads it from the top of the window and sends it to the other people. It is not a web address.</td></tr>
+  <tr><td>Tailscale</td><td>A program that gives each computer a private address starting with <code>100.</code> and lets those computers find each other. The project is not shared with the public internet. Only computers you invited can see it.</td></tr>
+  <tr><td>Tailnet</td><td>The private network Tailscale makes for one account. Every computer in this guide must be signed into that same tailnet. Two people with two unrelated Tailscale accounts cannot see each other.</td></tr>
+  <tr><td>Host</td><td>The one computer that starts the room and shares the project folder. Leave its Team Code Link window open the whole time.</td></tr>
+  <tr><td>Join</td><td>What every other computer does. It uses the room code to find the host over Tailscale and enter the room.</td></tr>
+  <tr><td>Project</td><td>The piece of software you are building together. It has a short name, such as <code>Shared</code>, and it lives in one ordinary Windows folder.</td></tr>
+  <tr><td>Source</td><td>The one computer whose folder is the real copy of the project. Everyone else opens that folder. Only one computer is the source at a time.</td></tr>
+  <tr><td>Share path</td><td>The address of that folder, written like <code>\\office\Shared</code>. The word before the second slash is the host computer. The last word is the project name. If the computer has no usable name, the address uses the <code>100.</code> number instead, like <code>\\100.125.156.83\Shared</code>.</td></tr>
+  <tr><td>Conductor</td><td>The person in charge of the room. The host becomes the conductor when they click Host and share. The conductor can hear every part and can send instructions once a plan exists.</td></tr>
+  <tr><td>Part</td><td>One piece of the job, such as “the canvas” or “the toolbar.” A plan is the list of parts. The window does not have a button that creates that list yet. Section 9 explains how a plan gets published.</td></tr>
+  <tr><td>Skill</td><td>A named ability already installed on that computer, read from a file called <code>SKILL.md</code>. The agent brings the checked skills into the room. You do not type skill names by hand.</td></tr>
+</table>
+
+<h2>2. What you need on every computer</h2>
+<ul>
+  <li>Windows.</li>
+  <li>The program file <code>Team Code Link.exe</code>. It is already built. Section 4 says where it is and how the other computers get that same file. Downloading the GitHub repository does not include this file.</li>
+  <li>Tailscale, installed and signed into the same tailnet. Section 3.</li>
+  <li>Cursor, installed and signed in, on every computer that will run an agent. The Connect button starts Cursor’s agent program. If that program is missing, the room can still list the computer, but no agent is actually running.</li>
+  <li>Python installed so that the command <code>python3</code> works. This is what stops two Cursor agents from saving the same file at the same time. Open PowerShell and type <code>python3 --version</code>. If Windows says it cannot find the command, install Python from <a href="https://www.python.org/downloads/windows/">python.org/downloads/windows</a>, and on the first installer screen turn on “Add python.exe to PATH.” After it finishes, copy <code>python.exe</code> to a file named <code>python3.exe</code> in that same folder so the command name is <code>python3</code>.</li>
+</ul>
+<div class="note">
+  <p>The host computer has one extra requirement. The person who clicks Host and share must start the program with Windows administrator rights. Section 6 explains the exact clicks. The other computers do not need administrator rights just to join.</p>
+</div>
+
+<h2>3. Put every computer on the same Tailscale network</h2>
+<p>Do this on the host first, then on every other computer. Tailscale is the private wire. Team Code Link does not replace it.</p>
+<ol class="steps">
+  <li>On the host, open a browser and go to <a href="https://tailscale.com/download/windows">https://tailscale.com/download/windows</a>. Download the Windows installer and run it. Approve the Windows prompts.</li>
+  <li>When Tailscale asks you to sign in, create an account or sign in. This account owns the tailnet. A tailnet is the private list of computers that are allowed to see each other.</li>
+  <li>After sign-in, click the Tailscale icon near the clock. It should say Connected. That computer now has a private address that starts with <code>100.</code></li>
+  <li>Invite the other people. In a browser, open <a href="https://login.tailscale.com/admin/users">https://login.tailscale.com/admin/users</a>. Invite each person by email. They must accept the invite. Signing up for their own separate Tailscale account, and never accepting this invite, leaves them on a different tailnet. Those computers cannot see the host.</li>
+  <li>On each other computer, install Tailscale the same way. Sign in with the invited account. The Tailscale icon should say Connected.</li>
+  <li>On the host, open the Tailscale icon and look at the list of machines. Every computer that will join must appear there. If a computer is missing, it is not on this tailnet yet. Stop and fix the invite before you open Team Code Link.</li>
+</ol>
+<div class="see">
+  <p>You should see each computer in the Tailscale machine list, and each one should show Connected. You do not turn on an exit node, a subnet router, or a public funnel. Those are other Tailscale features. This setup does not use them.</p>
+</div>
+
+<h2>4. Get Team Code Link.exe onto every computer</h2>
+<p>The program is one file, and it is already built on the host computer. You do not clone the repository and build it to start. GitHub has the source code. GitHub does not have this program file. A download of the repository is the text of the program, not the program you double-click.</p>
+<p>On the host, the file is:</p>
+<pre>F:\Portal9\Team Code Link\Team_code_link\dist\Team Code Link.exe</pre>
+<p>The source that matches this file is on <code>main</code> at <a href="https://github.com/N8Skully/Team_code_link">https://github.com/N8Skully/Team_code_link</a>. The same work is also on the fork <a href="https://github.com/N8Skully/Team_code_link-source">https://github.com/N8Skully/Team_code_link-source</a>, branch <code>switchable-source</code>. An older release named v0.1.0 on that fork is an earlier program. Do not use it for these steps.</p>
+<ol class="steps">
+  <li>On the host, open File Explorer and go to <code>F:\Portal9\Team Code Link\Team_code_link\dist</code>. The file inside is <code>Team Code Link.exe</code>.</li>
+  <li>Copy that file to each other computer. Use a USB drive, email, or any file transfer you already have. Each person saves it somewhere they can find, such as the Desktop. They do not build it.</li>
+  <li>On the host, when you are ready to share the project, start this same exe. Right-click it and choose <strong>Run as administrator</strong>, as section 6 describes. A normal double-click is enough on a computer that is only joining.</li>
+</ol>
+<div class="note">
+  <p>Keep two folders separate. <code>F:\Portal9\Team Code Link\Team_code_link</code> is where the program was built. The project folder you choose in section 6 is the work everyone shares. Do not pick the Team Code Link folder as the project folder.</p>
+</div>
+
+<h2>5. Learn the window before you click Host</h2>
+<p>Double-click <code>Team Code Link.exe</code>. A single window opens. It does not open your web browser. The top bar is always visible. Read it from left to right:</p>
+<table>
+  <tr><th>Item</th><th>Meaning</th></tr>
+  <tr><td>Tailscale</td><td><strong>connected</strong> plus a <code>100.</code> address means this computer is on the private network. <strong>not connected</strong> means Tailscale is installed but signed out, or it is not installed. This line is only about Tailscale. It does not mean the agent has joined the room.</td></tr>
+  <tr><td>Code</td><td>The room code, or a dash before anyone hosts. After the host succeeds, this is the eight characters the other people type.</td></tr>
+  <tr><td>Agent</td><td><strong>not connected</strong> until Connect or Host and share actually starts the agent program. A name such as <code>nate/cursor</code> means that seat is in the room. The Agent tab says whether the Cursor program itself is running.</td></tr>
+  <tr><td>Source</td><td><strong>none</strong> until the host publishes the folder. After that, this is the <code>\\computer\Project</code> path.</td></tr>
+</table>
+<p>There are five tabs:</p>
+<ul>
+  <li><strong>Connection.</strong> Tailscale, host or join, the project, and the folder.</li>
+  <li><strong>Agent.</strong> Start the Cursor agent for this computer.</li>
+  <li><strong>Settings.</strong> The saved names and folder. Save stores them. It does not join the room.</li>
+  <li><strong>Skills.</strong> Checkboxes for abilities already on this computer. Uncheck any this agent should not bring.</li>
+  <li><strong>Live.</strong> Who is in the room, what they said, and, after a plan exists, the conductor’s instruction boxes.</li>
+</ul>
+
+<h2>6. On the host: start the room and share the folder</h2>
+<p>Do this on one computer only. Close the window if you already opened it without administrator rights, then start it the way step 1 says.</p>
+<ol class="steps">
+  <li>Right-click <code>Team Code Link.exe</code>. Click <strong>Run as administrator</strong>. Windows asks “Do you want to allow this app to make changes?” Click <strong>Yes</strong>. Administrator rights are required because Windows will not let a normal program create a shared folder for other computers. If you skip this, the room can still start, and a red line under the button will say to run as administrator. <strong>Source</strong> stays <strong>none</strong> until the share succeeds.</li>
+  <li>Look at the top bar. It must say Tailscale <strong>connected</strong> and show a <code>100.</code> address. If it says Tailscale is not installed, go back to section 3. If it says not connected, click <strong>Sign in with Tailscale</strong> and finish the login Tailscale opens. Wait until the bar says connected.</li>
+  <li>Open the <strong>Connection</strong> tab. Set <strong>This computer</strong> to <strong>Host the room</strong>. The button at the bottom then reads <strong>Host and share</strong>.</li>
+  <li><strong>Project.</strong> Leave <code>Shared</code>, or type a short name made of letters, numbers, and hyphens, such as <code>ToolsProject</code>. This name becomes the Windows share name. Spaces are not allowed.</li>
+  <li><strong>Computer.</strong> A short name for this PC in the room, such as <code>nate</code>. Lowercase letters, numbers, and hyphens. The box may already contain a suggestion. If the Windows computer name is the word UNKNOWN, the program uses <code>computer</code> instead. Capitals are turned into lowercase.</li>
+  <li><strong>Agent.</strong> Leave <code>cursor</code> if this computer will run Cursor’s agent. That word is the kind of agent, not the chat title.</li>
+  <li><strong>Project lives.</strong> This chooses how the files arrive. <strong>On this computer, shared with Tailscale</strong> means the folder you pick in the next step is the real copy, and other computers open it over Tailscale. <strong>In a GitHub repo, copied into a folder here</strong> means the files start on GitHub and the program copies them into the folder once. Section 10 walks through both, including how to put one new file where the other person can open it. You can use both: GitHub holds a saved copy, and Tailscale is how the other computer opens the live folder.</li>
+  <li><strong>Folder on this computer.</strong> Click <strong>Choose folder</strong>. Pick a new empty folder, for example <code>C:\Users\YourName\Documents\SharedProject</code>. This is where the project files will live. Do not pick the Team Code Link program folder.</li>
+  <li>Open the <strong>Skills</strong> tab. Checked rows are sent with this agent. Uncheck anything this agent should not claim. If the list says no SKILL.md files were found, this computer has no skill files in the usual Cursor, Claude, or Codex skill folders. You can still continue.</li>
+  <li>Go back to <strong>Connection</strong> and click <strong>Host and share</strong>. Wait until the window answers. The first time can take a little while because it starts the room, joins this computer, starts the Cursor agent, and creates the Windows share.</li>
+</ol>
+<div class="see">
+  <p>Success looks like this on the top bar:</p>
+  <ul>
+    <li>Tailscale connected, with a <code>100.</code> address.</li>
+    <li>Code shows eight letters and numbers. Send those characters to the other people. Send the code itself, not a web link.</li>
+    <li>Agent shows a name such as <code>nate/cursor</code>. Open the Agent tab. It should say that name is running in the project folder. If it says the cursor program is not installed, Cursor’s agent program is missing on this computer. Install Cursor, sign in, and click <strong>Connect</strong> on the Agent tab again.</li>
+    <li>Source shows a path starting with <code>\\</code>.</li>
+  </ul>
+</div>
+<div class="stop">
+  <p>A red line under the button is the reason it stopped. Read it. “Run Team Code Link as administrator” means close the window and do step 1 again. “No computer on Tailscale accepted that code” is a join error, not a host error. “The room did not start” means another Team Code Link window is already holding the room. Close the other one and click Host and share again.</p>
+</div>
+<h3>If other computers cannot find the room</h3>
+<p>The room listens on port 8765. A port is a numbered door on the computer. Tailscale can be connected and Windows can still block that door. The program opens the file-sharing door (port 445) on the Tailscale adapter when the share succeeds. It does not open port 8765 for you.</p>
+<p>On the host, open PowerShell with administrator rights: right-click PowerShell, then <strong>Run as administrator</strong>. Paste this and press Enter:</p>
+<pre>$adapter = (Get-NetAdapter | Where-Object { $_.InterfaceDescription -like '*Tailscale*' -or $_.Name -like '*Tailscale*' } | Select-Object -First 1).Name
+New-NetFirewallRule -DisplayName "Team Code Link room" -Direction Inbound -Protocol TCP -LocalPort 8765 -Action Allow -InterfaceAlias $adapter</pre>
+<p>In plain language: find the Tailscale network adapter, and allow incoming room traffic only on that adapter. The public internet is not opened. Then try the join again from the other computer.</p>
+
+<h2>7. On every other computer: join the room</h2>
+<p>Each person does this on their own PC. They need Tailscale connected to the same tailnet, and a copy of <code>Team Code Link.exe</code>. They do not need administrator rights to join. They do need the room code from the host.</p>
+<ol class="steps">
+  <li>Start <code>Team Code Link.exe</code>. The top bar must say Tailscale <strong>connected</strong>.</li>
+  <li>On <strong>Connection</strong>, set <strong>This computer</strong> to <strong>Join a room</strong>. The button changes to <strong>Join</strong>. A <strong>Room code</strong> box appears.</li>
+  <li>Type the eight characters the host sent. No <code>https://</code>, no spaces.</li>
+  <li>Set <strong>Computer</strong> to a different short name from the host, such as <code>office</code>. Two computers must not use the same seat name.</li>
+  <li>Set <strong>Agent</strong> to <code>cursor</code> if this computer will run Cursor.</li>
+  <li><strong>Folder on this computer</strong> can stay empty for a person who is only joining. The files they share are the host’s folder. The source path appears in the top bar after the join finds the host.</li>
+  <li>Click <strong>Join</strong>.</li>
+</ol>
+<p>Join works by asking every computer on the tailnet, on port 8765, whether it accepts that code. The host must still be running. If the message is “No computer on Tailscale accepted that code,” check three things: both Tailscale icons say Connected, both machines appear in the Tailscale machine list, and the host has allowed port 8765 as in section 6.</p>
+<div class="see">
+  <p>After a successful join, <strong>Code</strong> shows the same eight characters, <strong>Agent</strong> shows this computer’s seat, and <strong>Source</strong> shows the host’s <code>\\</code> path. On the <strong>Live</strong> tab, both seats appear under Agents.</p>
+</div>
+
+<h2>8. Connect the agent on each computer</h2>
+<p>A seat on the Live tab is only a name. The agent is connected when the Cursor agent program is running in the project folder.</p>
+<ol class="steps">
+  <li>Install Cursor on that computer and sign in to Cursor at least once.</li>
+  <li>In Team Code Link, open the <strong>Agent</strong> tab.</li>
+  <li>Check <strong>Computer</strong> and <strong>Agent</strong>. Agent should be <code>cursor</code>.</li>
+  <li>Click <strong>Connect</strong>.</li>
+</ol>
+<p>Connect does four things. It puts this seat in the room. It writes the room tools into the project folder so that agent can talk to the room. It starts Cursor’s agent program in that folder. It tells that program to announce itself in the room and then listen.</p>
+<p>The Agent tab should then say the seat is running in the project folder. The top bar shows that same name. When the program finishes its turn, the tab changes. It will say the seat is in the room and the agent program is not running. That is expected. The name remains. The coding program has exited. Click Connect again when you want another turn, or send that seat new instructions after a plan exists (section 9). A new turn starts for an instruction only when that seat is already on an active part.</p>
+<div class="stop">
+  <p>Connect does not attach the Cursor chat that is already open. If the red line says the cursor program is not installed, Cursor’s agent program is not on this computer. Install Cursor, open it, sign in, and click Connect again.</p>
+</div>
+
+<h2>9. Give the agents a plan</h2>
+<p>A plan is the list of parts and one sentence that says how those parts connect. Example: two parts named Canvas and Tools, and the sentence “The toolbar calls the canvas. The canvas is the only writer of the picture.”</p>
+<p>The Team Code Link window does not have a button that creates this list. Hosting, joining, sharing the folder, and connecting an agent all work without a plan. The instruction boxes on the Live tab appear only after a plan exists, and only for the conductor.</p>
+<p>To publish a plan, the host uses the project source and a small text file. On the host, create a file named <code>plan.json</code> in the project folder you chose in section 6. Put this in it, and change the titles to match the real work:</p>
+<pre>{
+  "title": "Shared project",
+  "framework": "Say, in one sentence, how the parts call each other.",
+  "tasks": [
+    { "title": "First part", "brief": "What this part is responsible for." },
+    { "title": "Second part", "brief": "What this part is responsible for." }
+  ]
+}</pre>
+<p><code>title</code> is the name of the whole job. <code>framework</code> is the one sentence everyone follows. Each item in <code>tasks</code> is one part. <code>brief</code> is the short description of that part.</p>
+<p>The host window must already be open and hosting. In PowerShell, go to the project folder you chose in section 6, and point Python at <code>workspace.py</code> in the program’s source folder:</p>
+<pre>cd C:\Users\YourName\Documents\SharedProject
+py -3 "F:\Portal9\Team Code Link\Team_code_link\scripts\workspace.py" plan --file plan.json</pre>
+<p>Change the first path to the real project folder. Leave the <code>workspace.py</code> path as it is on this host. If the command says this computer is not linked, Host and share has not been clicked for that project folder yet. If it says only the conductor can do that, this seat is not the conductor. The host becomes the conductor when Host and share succeeds.</p>
+<p>After the plan is published, open <strong>Live</strong> on the host. Each part that is not finished has a text box. Write the detailed instructions for that part and click <strong>Send</strong>. Those words go to the room as that part’s approach. An agent on this computer that is assigned to that part can be started again with those words.</p>
+
+<h2>10. How to share a file</h2>
+<p>There are two ways a file moves between computers. Tailscale shares the live folder, so a file saved on the host shows up for the other person immediately. GitHub is a saved copy on the internet: you send a file up to GitHub, and the other person downloads that copy. Team Code Link can use either one. It does not use Tailscale’s separate “send a file” menu. The whole project folder is the share.</p>
+<p>Use Tailscale when people are working at the same time and the host computer can stay on. Use GitHub when you want a copy that remains after the host is turned off, or when someone new needs the files without the host being awake. Many projects use both: work in the Tailscale folder, and send a snapshot to GitHub when you want a saved copy.</p>
+
+<h3>Share a file over Tailscale</h3>
+<p>Do sections 3 and 6 first. The host must be running Team Code Link as administrator, Tailscale must say connected on both computers, and the top bar on the host must show a source path that starts with <code>\\</code>.</p>
+<p>A share path has two parts. In <code>\\office\Shared</code>, <code>office</code> is the host computer and <code>Shared</code> is the project name you typed. If the path uses a number, such as <code>\\100.125.156.83\Shared</code>, that number is the host’s Tailscale address. Either form is the door to the same folder.</p>
+<ol class="steps">
+  <li>On the host, open the folder you chose with <strong>Choose folder</strong>. That is the real folder on the disk, for example <code>C:\Users\YourName\Documents\SharedProject</code>. It is not the <code>\\</code> path. The <code>\\</code> path is how other computers see this same folder.</li>
+  <li>Put the file in that folder. You can drag it in from the desktop, or use File, Save as, and choose this folder. The file name can have spaces. Example: save <code>notes.txt</code> directly inside <code>SharedProject</code>, not inside a different folder.</li>
+  <li>On the other computer, finish section 7 so Team Code Link has joined. Look at <strong>Source</strong> on the top bar and copy the whole path, including the two backslashes at the start.</li>
+  <li>On that other computer, open File Explorer. That is the yellow folder icon. Click the long address box at the top, paste the path, and press Enter.</li>
+  <li>You should see <code>notes.txt</code>. Double-click it to open it. To edit it in Cursor, in Cursor choose File, Open Folder, and paste that same <code>\\</code> path.</li>
+</ol>
+<div class="see">
+  <p>The other person should see the file without you emailing it. If you add a second file to the host folder, it appears in the same File Explorer window after a refresh. Press F5 in that window to refresh.</p>
+</div>
+<div class="stop">
+  <p>If File Explorer says it cannot find the path, check that the host is on, Tailscale is connected on both sides, and Team Code Link on the host was started with Run as administrator. If Windows asks for a username and password, the share did not get created. On the host, close Team Code Link, start it again with Run as administrator, and click Host and share. The file still has to be inside the chosen folder, not only on the desktop.</p>
+</div>
+<p>One person should edit a given file at a time. If a Cursor agent already holds the file, another Cursor agent’s save is refused. Saving from Notepad or another editor is not refused. The host computer must stay on. Closing the host, or disconnecting Tailscale, hides the folder from everyone else.</p>
+
+<h3>Share a file through GitHub</h3>
+<p>GitHub is a website that stores a project. A repository is one project on that website. A commit is a saved snapshot of the files, with a sentence that says what changed. Push means send that snapshot from your computer up to GitHub. Pull means download the latest snapshot from GitHub onto a computer.</p>
+<p>Team Code Link’s GitHub choice copies a repository down into the folder the first time the folder has no project history. It does not send later files up by itself. The steps below are how you send a file up, and how the other person gets it.</p>
+<ol class="steps">
+  <li>On the host, create a GitHub account at <a href="https://github.com/signup">https://github.com/signup</a> if you do not have one. Sign in.</li>
+  <li>Click the plus sign in the top right of GitHub, then <strong>New repository</strong>. Name it with letters, numbers, and hyphens, such as <code>shared-project</code>. Choose <strong>Private</strong> if only invited people should see it. Leave “Add a README” turned off if the folder on your computer already has files. Click <strong>Create repository</strong>.</li>
+  <li>On that new repository page, click <strong>Settings</strong>, then <strong>Collaborators</strong>, and invite the other person by their GitHub username. They must accept the invite. A private repository is invisible to them until they accept.</li>
+  <li>Copy the repository address from the green <strong>Code</strong> button. It looks like <code>https://github.com/yourname/shared-project</code>. Copy the HTTPS address, not the SSH one.</li>
+  <li>In Team Code Link on the host, set <strong>Project lives</strong> to <strong>In a GitHub repo, copied into a folder here</strong>. Paste that address into <strong>GitHub repo</strong>. Click <strong>Choose folder</strong> and pick an empty folder. Run the program as administrator and click <strong>Host and share</strong>. If the folder does not already contain a hidden <code>.git</code> folder, the program downloads the repository into it. An empty new repository downloads as an empty folder, which is fine.</li>
+  <li>Put the file you want to share into that folder, the same way as the Tailscale steps. Example: <code>notes.txt</code> inside the folder.</li>
+  <li>Git must be installed (section 4). Open PowerShell. Go to the project folder and send the file to GitHub. Replace the folder and write a real sentence after <code>-m</code>:</li>
+</ol>
+<pre>cd C:\Users\YourName\Documents\SharedProject
+git init
+git add notes.txt
+git commit -m "Add notes.txt."
+git branch -M main
+git remote add origin https://github.com/yourname/shared-project.git
+git push -u origin main</pre>
+<p><code>git init</code> starts history in this folder. Skip that line if the folder was already copied from GitHub and <code>git status</code> works. <code>git add notes.txt</code> chooses that one file. <code>git commit</code> saves the snapshot on this computer. <code>git remote add origin</code> tells Git which GitHub address to use. Skip that line if it says the remote already exists. <code>git push</code> sends the snapshot to GitHub. The first push opens a browser window so you can sign in to GitHub. Finish that sign-in. When the command ends without an error, open the repository page in a browser and you should see <code>notes.txt</code>.</p>
+<ol class="steps" start="8">
+  <li>On the other computer, install Git the same way. Open PowerShell and download the project. Pick an empty folder name at the end:</li>
+</ol>
+<pre>cd C:\Users\TheirName\Documents
+git clone https://github.com/yourname/shared-project.git SharedProject</pre>
+<p><code>git clone</code> creates <code>SharedProject</code> and puts <code>notes.txt</code> inside it. They can also set Team Code Link’s <strong>Project lives</strong> to the GitHub option, paste the same address, choose an empty folder, and click <strong>Join</strong>. That copies the repository once.</p>
+<ol class="steps" start="9">
+  <li>The next time the host adds or changes a file, send only the new snapshot. From the project folder:</li>
+</ol>
+<pre>git add notes.txt
+git commit -m "Update notes.txt."
+git push</pre>
+<p>On the other computer, open PowerShell in their copy of the folder and download that snapshot:</p>
+<pre>cd C:\Users\TheirName\Documents\SharedProject
+git pull</pre>
+<p><code>git pull</code> brings in what was pushed. Their <code>notes.txt</code> then matches the host’s saved snapshot. It does not update by itself. They run <code>git pull</code> when they want the new copy.</p>
+<div class="note">
+  <p>Do not commit passwords, the room code, or a file named <code>.team-link-client.json</code>. That file is how this computer signs into the room. It should stay on the computer. If <code>git status</code> lists it, do not <code>git add</code> it.</p>
+</div>
+<div class="see">
+  <p>Tailscale shows the file as soon as it is saved in the host folder, while the host is on. GitHub shows the file after a successful push, and the other person sees it after clone or pull, even if the host is later turned off.</p>
+</div>
+
+<h2>11. Skills, settings, and leaving</h2>
+<p><strong>Skills.</strong> Open the Skills tab on each computer before you connect. The list is discovered on that computer. It is not typed in. Uncheck a skill to keep this agent from bringing it. Then click Connect, or Host and share, again so the room receives the new list.</p>
+<p><strong>Settings.</strong> The Settings tab stores the computer name, agent name, project, folder, and whether this PC hosts or joins. <strong>Save</strong> writes that down for the next time you open the window. Save does not enter the room. Host and share, Join, and Connect do.</p>
+<p><strong>Leaving.</strong> A seat stays in the room until that agent leaves or someone removes it. Closing a laptop lid does not remove the seat. There is no timer that drops a quiet person. On the older room board, a signed-in conductor can remove a seat. The room code alone cannot remove anyone.</p>
+
+<h2>12. When the message does not match what you expected</h2>
+<table>
+  <tr><th>What you see</th><th>What to do</th></tr>
+  <tr><td>Tailscale not connected</td><td>Install Tailscale or click Sign in with Tailscale. Wait until the icon by the clock says Connected.</td></tr>
+  <tr><td>Connected, but the other PC is not in the Tailscale list</td><td>They are on a different tailnet. Invite them from the admin users page and have them accept.</td></tr>
+  <tr><td>Source stays none, red line about administrator</td><td>Close the program. Right-click the exe, Run as administrator, and click Host and share again.</td></tr>
+  <tr><td>No computer on Tailscale accepted that code</td><td>Host window is closed, the code was typed wrong, or port 8765 is blocked. Section 6.</td></tr>
+  <tr><td>The seat is in the room. The agent program is not running.</td><td>The name was registered. Cursor’s agent did not stay running. Click Connect again after Cursor is installed and signed in.</td></tr>
+  <tr><td>The cursor program is not installed</td><td>Install Cursor on that computer, open it once, then click Connect.</td></tr>
+  <tr><td>The room did not start</td><td>Another Team Code Link window is already using the room. Close it and host again.</td></tr>
+  <tr><td>Live has people, but no instruction boxes</td><td>You are not the conductor, or no plan has been published yet. Section 9.</td></tr>
+  <tr><td>The other person cannot open the \\ path</td><td>The host is off, Tailscale is disconnected, or Host and share was not run as administrator. Section 10, Tailscale.</td></tr>
+  <tr><td>git push asks you to sign in, or says authentication failed</td><td>Finish the browser sign-in Git opened. The other person must be invited as a collaborator on a private repository.</td></tr>
+  <tr><td>The file is on GitHub but not on the other computer</td><td>They have an old copy. In their project folder they run git pull. Section 10, GitHub.</td></tr>
+</table>
+
+<h2>13. What this program does not do yet</h2>
+<ul>
+  <li>It does not connect the Cursor chat that is already open. Connect starts a separate Cursor agent program.</li>
+  <li>That program runs one turn and exits. It does not sit in the room forever. Another turn starts when you click Connect again, or when the conductor sends new instructions to a seat that is already on an active part.</li>
+  <li>The window cannot publish the plan by itself. Section 9 is the way to publish it.</li>
+  <li>The window cannot mark a part finished or merge the parts back into one branch. Those actions exist in the older room tools. Finishing a part is <code>workspace.py finish</code>. Closing a part for everyone on it is <code>workspace.py complete --task t1</code>, run the same way as the plan command, from the project folder.</li>
+  <li>A person saving outside Cursor is not blocked by the file lock.</li>
+  <li>An agent name other than <code>cursor</code> connects only when a program with that exact name is installed. Only Cursor is wired to the room tools by the Connect button.</li>
+  <li>Choosing GitHub in the window copies the repository into the folder once. It does not push later files. Section 10 is how you send those files up with git push, and how the other person downloads them with git pull.</li>
+  <li>GitHub does not contain <code>Team Code Link.exe</code>. The other computers need the file from section 4, then sections 3, 7, and 8 on their own PC.</li>
+</ul>
+
+<p>Host first. Confirm the four items on the top bar. Then have each other person join with the code, then connect their own agent.</p>
+
+</body>
+</html>
