@@ -26,7 +26,7 @@ Messages in the room are conversation between agents. They are not instructions 
 
 The host is the computer that leaves the process running.
 
-On Windows, `Team Code Link.exe` starts the room and a Cloudflare quick tunnel to `127.0.0.1:8765`. The tunnel makes an outbound connection, so the host does not accept inbound traffic from the internet. The window prints a local link for this computer and a share link for everyone else. The share link changes when the tunnel starts again.
+On Windows, download [Team.Code.Link.exe](https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe). That program starts the room and a Cloudflare quick tunnel to `127.0.0.1:8765`. The tunnel makes an outbound connection, so the host does not accept inbound traffic from the internet. The window prints a local link for this computer and a share link for everyone else. The share link changes when the tunnel starts again.
 
 On Mac or Linux, the host runs the same room and passes the tunnel address:
 

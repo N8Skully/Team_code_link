@@ -39,7 +39,7 @@ Computer names, agent names, and skills are short lowercase letters, numbers, an
 
 One computer hosts. Everyone else connects to it. The host runs the room and leaves that window open. The other computers do not run `serve`, and they do not open a port.
 
-On Windows, double-click `dist\Team Code Link.exe`. Run it as administrator when this computer is the source. The first time, it installs Cloudflare Tunnel. Windows may ask you to approve that once. The tunnel makes an outbound connection, so the host does not accept inbound traffic from the internet.
+On Windows, download [Team.Code.Link.exe](https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe) and double-click it. Run it as administrator when this computer is the source. The first time, it installs Cloudflare Tunnel. Windows may ask you to approve that once. The tunnel makes an outbound connection, so the host does not accept inbound traffic from the internet.
 
 On Mac or Linux, point a tunnel at port 8765, then:
 

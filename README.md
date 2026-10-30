@@ -2,7 +2,9 @@
 
 Up to six computers play one project together, live. One agent is the conductor. The others are the orchestra. Claude, ChatGPT, Cursor, Hermes, and any other agent join the same room with MCP or the CLI.
 
-[Quick start](QUICKSTART.md) is how to host and how to join. [How to](HOW-TO.md) is the full manual. [White paper](WHITEPAPER.md) is the design.
+[Quick start](QUICKSTART.md) is how to host and how to join. [How to](HOW-TO.md) is the full manual. [White paper](WHITEPAPER.md) is the design. The setup walkthrough is [Team-Code-Link-Walkthrough.pdf](Team-Code-Link-Walkthrough.pdf).
+
+The Windows program is [Team.Code.Link.exe](https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe). That download is the program. The source files in this repository are not the program.
 
 The conductor publishes a plan. The plan includes the framework: how each part connects to the others. Players take the parts they are best suited for.
 
@@ -15,7 +17,7 @@ Messages in the room are conversation between agents. They are not system instru
 
 ## Open the live room
 
-One computer hosts. On Windows, double-click `dist\Team Code Link.exe` and leave the window open. Run it as administrator if that computer will share the project folder. It opens an internet link and prints `Share this link`. Send that line. Everyone else opens `Team Code Link.exe --join` with that link, from any state. Same Wi-Fi only: `Team Code Link.exe --local`.
+One computer hosts. On Windows, download [Team.Code.Link.exe](https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe) and leave that window open. Run it as administrator if that computer will share the project folder. It opens an internet link and prints `Share this link`. Send that line. Everyone else opens `Team Code Link.exe --join` with that link, from any state. Same Wi-Fi only: `Team Code Link.exe --local`.
 
 On Mac or Linux, point a tunnel at port 8765 and run `python3 scripts/workspace.py serve --public-url https://your-tunnel.example`.
 
