@@ -85,7 +85,7 @@
 <h2>2. What you need on every computer</h2>
 <ul>
   <li>Windows.</li>
-  <li>The program file <code>Team Code Link.exe</code>. It is already built. Section 4 says where it is and how the other computers get that same file. Downloading the GitHub repository does not include this file.</li>
+  <li>The program file. Download <a href="https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe">Team.Code.Link.exe</a>. Section 4 explains that name. The same file is on the fork at <a href="https://github.com/N8Skully/Team_code_link-source/releases/latest/download/Team.Code.Link.exe">Team_code_link-source</a>.</li>
   <li>Tailscale, installed and signed into the same tailnet. Section 3.</li>
   <li>Cursor, installed and signed in, on every computer that will run an agent. The Connect button starts Cursor’s agent program. If that program is missing, the room can still list the computer, but no agent is actually running.</li>
   <li>Python installed so that the command <code>python3</code> works. This is what stops two Cursor agents from saving the same file at the same time. Open PowerShell and type <code>python3 --version</code>. If Windows says it cannot find the command, install Python from <a href="https://www.python.org/downloads/windows/">python.org/downloads/windows</a>, and on the first installer screen turn on “Add python.exe to PATH.” After it finishes, copy <code>python.exe</code> to a file named <code>python3.exe</code> in that same folder so the command name is <code>python3</code>.</li>
@@ -108,18 +108,18 @@
   <p>You should see each computer in the Tailscale machine list, and each one should show Connected. You do not turn on an exit node, a subnet router, or a public funnel. Those are other Tailscale features. This setup does not use them.</p>
 </div>
 
-<h2>4. Get Team Code Link.exe onto every computer</h2>
-<p>The program is one file, and it is already built on the host computer. You do not clone the repository and build it to start. GitHub has the source code. GitHub does not have this program file. A download of the repository is the text of the program, not the program you double-click.</p>
-<p>On the host, the file is:</p>
-<pre>F:\Portal9\Team Code Link\Team_code_link\dist\Team Code Link.exe</pre>
-<p>The source that matches this file is on <code>main</code> at <a href="https://github.com/N8Skully/Team_code_link">https://github.com/N8Skully/Team_code_link</a>. The same work is also on the fork <a href="https://github.com/N8Skully/Team_code_link-source">https://github.com/N8Skully/Team_code_link-source</a>, branch <code>switchable-source</code>. An older release named v0.1.0 on that fork is an earlier program. Do not use it for these steps.</p>
+<h2>4. Download Team Code Link onto every computer</h2>
+<p>The program is a file on the GitHub Releases page. Releases are the download area, separate from the source code. You do not clone the repository to get the program, and you do not build it.</p>
+<p>Download this file on every computer, including the host:</p>
+<p><a href="https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe">https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe</a></p>
+<p>The release page, if you want to see the version first, is <a href="https://github.com/N8Skully/Team_code_link/releases/latest">https://github.com/N8Skully/Team_code_link/releases/latest</a>. The same program is also on the fork: <a href="https://github.com/N8Skully/Team_code_link-source/releases/latest/download/Team.Code.Link.exe">https://github.com/N8Skully/Team_code_link-source/releases/latest/download/Team.Code.Link.exe</a>.</p>
+<p>The saved name is <code>Team.Code.Link.exe</code>. The dots are there because the download name cannot keep spaces. It is the Team Code Link program. You can leave that name, or rename the file to <code>Team Code Link.exe</code>. Either name starts the same program. Use version 0.2.0 or newer. The older file named v0.1.0 does not match this walkthrough.</p>
 <ol class="steps">
-  <li>On the host, open File Explorer and go to <code>F:\Portal9\Team Code Link\Team_code_link\dist</code>. The file inside is <code>Team Code Link.exe</code>.</li>
-  <li>Copy that file to each other computer. Use a USB drive, email, or any file transfer you already have. Each person saves it somewhere they can find, such as the Desktop. They do not build it.</li>
-  <li>On the host, when you are ready to share the project, start this same exe. Right-click it and choose <strong>Run as administrator</strong>, as section 6 describes. A normal double-click is enough on a computer that is only joining.</li>
+  <li>On each computer, open the download link above. The browser saves <code>Team.Code.Link.exe</code>. Put it somewhere you can find, such as the Desktop.</li>
+  <li>On the host, right-click that file and choose <strong>Run as administrator</strong> when you are ready for section 6. On a computer that is only joining, a normal double-click is enough.</li>
 </ol>
 <div class="note">
-  <p>Keep two folders separate. <code>F:\Portal9\Team Code Link\Team_code_link</code> is where the program was built. The project folder you choose in section 6 is the work everyone shares. Do not pick the Team Code Link folder as the project folder.</p>
+  <p>The project folder you choose in section 6 is the work everyone shares. Do not pick a Team Code Link source folder as that project folder. The program file and the project files stay separate.</p>
 </div>
 
 <h2>5. Learn the window before you click Host</h2>
@@ -317,7 +317,7 @@ git pull</pre>
   <li>A person saving outside Cursor is not blocked by the file lock.</li>
   <li>An agent name other than <code>cursor</code> connects only when a program with that exact name is installed. Only Cursor is wired to the room tools by the Connect button.</li>
   <li>Choosing GitHub in the window copies the repository into the folder once. It does not push later files. Section 10 is how you send those files up with git push, and how the other person downloads them with git pull.</li>
-  <li>GitHub does not contain <code>Team Code Link.exe</code>. The other computers need the file from section 4, then sections 3, 7, and 8 on their own PC.</li>
+  <li>The other computers download <code>Team.Code.Link.exe</code> from section 4, then do sections 3, 7, and 8 on their own PC.</li>
 </ul>
 
 <p>Host first. Confirm the four items on the top bar. Then have each other person join with the code, then connect their own agent.</p>

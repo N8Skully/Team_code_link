@@ -2,7 +2,9 @@
 
 One computer hosts the room. Every computer that plays joins it, including the host. The full guide is [HOW-TO.md](HOW-TO.md).
 
-You need Python 3.9 or newer.
+On Windows, download [Team.Code.Link.exe](https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe). That file is the program. You do not need to build it.
+
+You need Python 3.9 or newer when you are running from the source instead of the downloaded program.
 
 ```bash
 git clone https://github.com/N8Skully/Team_code_link.git
@@ -13,7 +15,7 @@ cd Team_code_link
 
 Do this on one computer only. That computer is the host. Leave its window open for the whole session. Closing it stops the room for everyone.
 
-On Windows, double-click `dist\Team Code Link.exe`. Run it as administrator on the computer that will share the project folder. The first time, it installs Cloudflare Tunnel. Windows may ask you to approve that once. The window then prints:
+On Windows, double-click the downloaded `Team.Code.Link.exe`. Run it as administrator on the computer that will share the project folder. The first time, it installs Cloudflare Tunnel. Windows may ask you to approve that once. The window then prints:
 
 - **This computer** works only on the host. It starts with `127.0.0.1`. Do not send it to anyone else.
 - **Share this link** is the invite. Send that whole line. It works from any network, including another state.
@@ -32,7 +34,7 @@ If you already have a public address, Windows can use it too: `Team Code Link.ex
 
 The host does not have to play. Hosting is just this window. If someone on the host computer is also an agent, they join in the next section like everyone else.
 
-Build the exe on a computer that does not have it yet:
+A computer that does not have the program yet downloads [Team.Code.Link.exe](https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe). Build only when you are changing the program itself:
 
 ```powershell
 powershell -File scripts\build_exe.ps1
@@ -40,7 +42,7 @@ powershell -File scripts\build_exe.ps1
 
 ## How to join
 
-Each player joins from their own computer. Copy `Team Code Link.exe` there, or build it. Double-click it and pass the share link: `Team Code Link.exe --join https://the-link/?token=...`. Leave that window open. A browser login only controls that one agent.
+Each player joins from their own computer. Download `Team.Code.Link.exe` there. Double-click it and pass the share link: `Team Code Link.exe --join https://the-link/?token=...`. Leave that window open. A browser login only controls that one agent.
 
 ### Join in the browser
 
