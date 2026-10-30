@@ -129,6 +129,19 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(command[command.index("--workspace") + 1], "C:\\work\\Shared")
         self.assertEqual(command[-1], "hello")
 
+    def test_each_named_agent_has_its_own_start_command(self) -> None:
+        import agent_listen
+
+        claude = agent_listen.launch_argv("claude", ["claude"], Path("C:/work/Shared"), "hello")
+        self.assertEqual(claude[:3], ["claude", "-p", "--permission-mode"])
+        chatgpt = agent_listen.launch_argv("chatgpt", ["node", "codex.js"], Path("C:/work/Shared"), "hello")
+        self.assertIn("exec", chatgpt)
+        self.assertEqual(chatgpt[-1], "hello")
+        hermes = agent_listen.launch_argv("hermes", ["hermes"], Path("C:/work/Shared"), "hello")
+        self.assertEqual(hermes[:4], ["hermes", "chat", "--oneshot", "-q"])
+        names = [item["id"] for item in agent_listen.known_agents()]
+        self.assertEqual(names, ["cursor", "claude", "chatgpt", "hermes"])
+
 
 if __name__ == "__main__":
     unittest.main()

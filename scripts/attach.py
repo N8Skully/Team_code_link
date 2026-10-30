@@ -312,6 +312,7 @@ def _desk(status: dict, snapshot, events: list, error: str) -> dict:
         "skills": discover_skills(liveclient.repo_root()),
         "board": _board_url(),
         "agent": agent_listen.status(),
+        "agents": agent_listen.known_agents(),
         "shareError": source_loop.share_error,
         "error": error,
     }

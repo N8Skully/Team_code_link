@@ -60,14 +60,14 @@
 
 <h1>Team Code Link</h1>
 <p class="lead">A full walkthrough for people who have not set this up before. Read it from the top. Do the steps in order. One person is the host. Every other person follows the join steps on their own computer.</p>
-<p>When you are done, up to six Windows computers can see one shared project folder, sit in one private room, and each start a Cursor agent that can hear that room.</p>
+<p>When you are done, up to six Windows computers can see one shared project folder, sit in one private room, and each start the agent program you choose. That program can be Cursor, Claude, ChatGPT, Hermes, or another command on that computer.</p>
 
 <h2>1. The words this guide uses</h2>
 <p>These words show up on the screen. Here is what each one means in this program.</p>
 <table>
   <tr><th>Word</th><th>What it means</th></tr>
   <tr><td>Computer</td><td>One physical PC. In the room it has a short name you choose, such as <code>nate</code> or <code>office</code>. That name is the seat.</td></tr>
-  <tr><td>Agent</td><td>A program that writes code. This guide uses Cursor’s agent. It is a separate program from the chat window already open in Cursor. Connecting puts that program into the room. It does not attach the chat you are reading right now.</td></tr>
+  <tr><td>Agent</td><td>The program on this computer that writes code. The Agent tab lists Cursor, Claude, ChatGPT, Hermes, and any other command. Connect starts the one you pick. It does not attach a chat window that is already open.</td></tr>
   <tr><td>Room</td><td>A private list of who is here, what they said, and which part of the work they are on. It runs on the host computer. It is not a website on the public internet.</td></tr>
   <tr><td>Room code</td><td>Eight letters and numbers, such as <code>AB12CD34</code>. It is the password for this room. The host reads it from the top of the window and sends it to the other people. It is not a web address.</td></tr>
   <tr><td>Tailscale</td><td>A program that gives each computer a private address starting with <code>100.</code> and lets those computers find each other. The project is not shared with the public internet. Only computers you invited can see it.</td></tr>
@@ -87,7 +87,7 @@
   <li>Windows.</li>
   <li>The program file. Download <a href="https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe">Team.Code.Link.exe</a>. Section 4 explains that name. The same file is on the fork at <a href="https://github.com/N8Skully/Team_code_link-source/releases/latest/download/Team.Code.Link.exe">Team_code_link-source</a>.</li>
   <li>Tailscale, installed and signed into the same tailnet. Section 3.</li>
-  <li>Cursor, installed and signed in, on every computer that will run an agent. The Connect button starts Cursor’s agent program. If that program is missing, the room can still list the computer, but no agent is actually running.</li>
+  <li>The agent program this computer will run, if it will run one. Section 8 lists Cursor, Claude, ChatGPT, Hermes, and any other command. A computer that only joins and opens the shared folder does not need one.</li>
   <li>Python installed so that the command <code>python3</code> works. This is what stops two Cursor agents from saving the same file at the same time. Open PowerShell and type <code>python3 --version</code>. If Windows says it cannot find the command, install Python from <a href="https://www.python.org/downloads/windows/">python.org/downloads/windows</a>, and on the first installer screen turn on “Add python.exe to PATH.” After it finishes, copy <code>python.exe</code> to a file named <code>python3.exe</code> in that same folder so the command name is <code>python3</code>.</li>
 </ul>
 <div class="note">
@@ -189,18 +189,41 @@ New-NetFirewallRule -DisplayName "Team Code Link room" -Direction Inbound -Proto
   <p>After a successful join, <strong>Code</strong> shows the same eight characters, <strong>Agent</strong> shows this computer’s seat, and <strong>Source</strong> shows the host’s <code>\\</code> path. On the <strong>Live</strong> tab, both seats appear under Agents.</p>
 </div>
 
-<h2>8. Connect the agent on each computer</h2>
-<p>A seat on the Live tab is only a name. The agent is connected when the Cursor agent program is running in the project folder.</p>
+<h2>8. Connect an agent on each computer</h2>
+<p>A seat on the Live tab is only a name. The agent is connected when the program you picked is actually running. Open the <strong>Agent</strong> tab. The list is the programs this window knows how to start. Pick one, read the line under the list, then click <strong>Connect</strong>.</p>
+<p>Connect puts this computer’s seat in the room, writes the room tools for that program into the project folder, and starts the program there. It tells the program to say it is connected and then listen. The top bar shows a name such as <code>office/claude</code> while that program is running. When the turn ends, the name stays in the room and the Agent tab says the program is not running. Click Connect again for another turn.</p>
+<h3>Cursor</h3>
 <ol class="steps">
-  <li>Install Cursor on that computer and sign in to Cursor at least once.</li>
-  <li>In Team Code Link, open the <strong>Agent</strong> tab.</li>
-  <li>Check <strong>Computer</strong> and <strong>Agent</strong>. Agent should be <code>cursor</code>.</li>
-  <li>Click <strong>Connect</strong>.</li>
+  <li>Install Cursor from <a href="https://cursor.com">cursor.com</a> and sign in once.</li>
+  <li>On the Agent tab, choose <strong>Cursor</strong>.</li>
+  <li>Click <strong>Connect</strong>. The window starts Cursor’s agent in the project folder. It does not attach a Cursor chat that is already open.</li>
 </ol>
-<p>Connect does four things. It puts this seat in the room. It writes the room tools into the project folder so that agent can talk to the room. It starts Cursor’s agent program in that folder. It tells that program to announce itself in the room and then listen.</p>
-<p>The Agent tab should then say the seat is running in the project folder. The top bar shows that same name. When the program finishes its turn, the tab changes. It will say the seat is in the room and the agent program is not running. That is expected. The name remains. The coding program has exited. Click Connect again when you want another turn, or send that seat new instructions after a plan exists (section 9). A new turn starts for an instruction only when that seat is already on an active part.</p>
-<div class="stop">
-  <p>Connect does not attach the Cursor chat that is already open. If the red line says the cursor program is not installed, Cursor’s agent program is not on this computer. Install Cursor, open it, sign in, and click Connect again.</p>
+<h3>Claude</h3>
+<ol class="steps">
+  <li>Install Claude Code so that opening PowerShell and typing <code>claude</code> starts it.</li>
+  <li>On the Agent tab, choose <strong>Claude</strong>.</li>
+  <li>Click <strong>Connect</strong>. The window starts <code>claude</code> in the project folder and gives it the room tools.</li>
+</ol>
+<h3>ChatGPT</h3>
+<ol class="steps">
+  <li>Install OpenAI’s Codex program so that typing <code>codex</code> in PowerShell starts it. Team Code Link uses that program for the ChatGPT agent.</li>
+  <li>On the Agent tab, choose <strong>ChatGPT</strong>.</li>
+  <li>Click <strong>Connect</strong>. The window starts Codex in the project folder.</li>
+</ol>
+<h3>Hermes</h3>
+<ol class="steps">
+  <li>Install Hermes so that typing <code>hermes</code> in PowerShell starts it.</li>
+  <li>On the Agent tab, choose <strong>Hermes</strong>.</li>
+  <li>Click <strong>Connect</strong>. The window starts Hermes in the project folder and adds the room tools to Hermes’s own settings.</li>
+</ol>
+<h3>Another program</h3>
+<ol class="steps">
+  <li>Choose <strong>Another program</strong>.</li>
+  <li>Type the command name, the same word you would type in PowerShell to start it. Example: <code>gemini</code>.</li>
+  <li>Click <strong>Connect</strong>. The window looks for that command and starts it in the project folder. If Windows cannot find the command, the red line says it is not installed.</li>
+</ol>
+<div class="see">
+  <p>You do not install every agent. Install the one this computer will run. A computer that only joins the room and opens the shared folder does not need any of them.</p>
 </div>
 
 <h2>9. Give the agents a plan</h2>
