@@ -1,6 +1,14 @@
 @echo off
 setlocal EnableExtensions
 cd /d "%~dp0"
+if exist "%~dp0Team Code Link.exe" (
+  start "" "%~dp0Team Code Link.exe" %*
+  exit /b 0
+)
+if exist "%~dp0dist\Team Code Link.exe" (
+  start "" "%~dp0dist\Team Code Link.exe" %*
+  exit /b 0
+)
 title Team Code Link
 
 echo Team Code Link

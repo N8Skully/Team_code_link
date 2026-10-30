@@ -16,29 +16,56 @@ from orchestra import OrchestraError
 CONFIG_NAME = "team-link-client.json"
 
 
+def _git_output(root: Path, *args: str) -> str:
+    """Run git in root and return its output. A computer without git, or a folder that is not a repo, gives ''."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), *args],
+            check=False,
+            text=True,
+            capture_output=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+    except OSError:
+        return ""
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
+def _project_top(folder: Path) -> Path | None:
+    """The git repo that owns this folder. The user profile is not a project."""
+    top = _git_output(folder, "rev-parse", "--show-toplevel")
+    if not top:
+        return None
+    found = Path(top).resolve()
+    if found == Path.home().resolve():
+        return None
+    return found
+
+
 def repo_root(start: Path | None = None) -> Path:
+    """The folder that holds this computer's room link.
+
+    TEAM_LINK_ROOT is that folder when the app and the agent must share one link.
+    An explicit start path is left alone so tests and callers can still point elsewhere.
+    """
+    forced = os.environ.get("TEAM_LINK_ROOT", "").strip()
+    if start is None and forced:
+        chosen = Path(forced)
+        if chosen.is_dir():
+            return chosen.resolve()
     probe = (start or Path.cwd()).resolve()
-    result = subprocess.run(
-        ["git", "-C", str(probe), "rev-parse", "--show-toplevel"],
-        check=False,
-        text=True,
-        capture_output=True,
-    )
-    if result.returncode == 0 and result.stdout.strip():
-        return Path(result.stdout.strip())
-    return probe
+    return _project_top(probe) or probe
 
 
 def config_path(root: Path | None = None) -> Path:
     root = root or repo_root()
-    result = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "--git-path", CONFIG_NAME],
-        check=False,
-        text=True,
-        capture_output=True,
-    )
-    if result.returncode == 0 and result.stdout.strip():
-        path = Path(result.stdout.strip())
+    if _project_top(root) is None:
+        return root / f".{CONFIG_NAME}"
+    found = _git_output(root, "rev-parse", "--git-path", CONFIG_NAME)
+    if found:
+        path = Path(found)
         if not path.is_absolute():
             path = root / path
         return path

@@ -187,9 +187,7 @@ class SameCodeTests(unittest.TestCase):
         )
         self.assertNotIn("<<<<<<<", subprocess.check_output(["git", "-C", str(self.origin), "show", "main:src/api.py"], text=True))
 
-    def test_dropped_work_waits_until_the_other_player_finishes(self) -> None:
-        os.environ["TEAM_LINK_STALE_SECONDS"] = "3"
-        self.addCleanup(lambda: os.environ.pop("TEAM_LINK_STALE_SECONDS", None))
+    def test_a_quiet_player_keeps_the_part(self) -> None:
         self.server.hub.close()
         self.server.shutdown()
         self.server.server_close()
@@ -236,26 +234,13 @@ class SameCodeTests(unittest.TestCase):
         self.commit_file(self.office, "src/api.py", "session = {}\n", "api in progress")
         self.assertEqual(self.run_cli(self.office, "sync").returncode, 0)
 
-        for _ in range(5):
-            self.assertEqual(self.run_cli(self.office, "room").returncode, 0)
-            import time
-            time.sleep(1)
-        waiting = self.run_cli(self.office, "room")
-        self.assertEqual(waiting.returncode, 0, waiting.stderr)
-        self.assertIn("home/claude (connection lost)", waiting.stdout)
-        self.assertIn("t1 Login form [waiting]", waiting.stdout)
-        self.assertIn("Your part: t2 Session API", waiting.stdout)
-
-        arrived = self.run_cli(studio, "join", "--name", "studio", "--agent", "hermes", "--skill", "ui")
-        self.assertEqual(arrived.returncode, 0, arrived.stderr)
-        self.assertNotIn("Your part: t1", arrived.stdout)
-        self.assertIn("t1 Login form [waiting]", arrived.stdout)
-
-        finished = self.run_cli(self.office, "finish")
-        self.assertEqual(finished.returncode, 0, finished.stderr)
-        self.assertIn("Your part: t1 Login form", finished.stdout)
-        self.assertEqual(git(self.office, "branch", "--show-current").stdout.strip(), "part/t1")
-        self.assertEqual((self.office / "src/form.py").read_text(encoding="utf-8"), "half-done\n")
+        import time
+        time.sleep(4)
+        room = self.run_cli(self.office, "room")
+        self.assertEqual(room.returncode, 0, room.stderr)
+        self.assertNotIn("connection lost", room.stdout)
+        self.assertIn("t1 Login form [active] home/claude", room.stdout)
+        self.assertIn("Your part: t2 Session API", room.stdout)
 
 
 if __name__ == "__main__":

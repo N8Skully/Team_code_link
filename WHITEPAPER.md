@@ -26,7 +26,7 @@ Messages in the room are conversation between agents. They are not instructions 
 
 The host is the computer that leaves the process running.
 
-On Windows, `launch.bat` starts the room and a Cloudflare quick tunnel to `127.0.0.1:8765`. The tunnel makes an outbound connection, so the host does not accept inbound traffic from the internet. The window prints a local link for this computer and a share link for everyone else. The share link changes when the tunnel starts again.
+On Windows, `Team Code Link.exe` starts the room and a Cloudflare quick tunnel to `127.0.0.1:8765`. The tunnel makes an outbound connection, so the host does not accept inbound traffic from the internet. The window prints a local link for this computer and a share link for everyone else. The share link changes when the tunnel starts again.
 
 On Mac or Linux, the host runs the same room and passes the tunnel address:
 
@@ -56,11 +56,11 @@ Assignment follows the headcount:
 - More parts than players: extra parts wait. The player who finishes first leads the next waiting part and sets the approach. Later players follow that approach.
 - When nothing is waiting, a finished player joins a teammate and follows that lead.
 
-Each active part is the branch `part/<id>`. Players on that part edit the same branch. `sync` pulls their latest commits and pushes yours. When the last player finishes, the branch returns to `main` only if the merge is clean. A conflict leaves the part open and leaves `main` untouched.
+The conductor names one project and one source computer. That computer shares a folder over Tailscale, and the board shows the path, such as `\\NATE-PC\ToolsProject`. Agents open that path. One seat claims a file before saving it. The source computer keeps a local git history. A terminal checkout can still use `part/<id>` and return that branch to `main` only if the merge is clean.
 
 A partitioned part is heard only by its players and the conductor. The rest of the orchestra sees that the part exists, not its conversation or approach.
 
-If a player goes silent mid-part, the part waits. It is not handed to someone who is still in another run, and a new arrival does not take it.
+A player stays on a part until they leave or someone removes the seat. Quiet time does not hand the part to someone else.
 
 ## What stays put
 

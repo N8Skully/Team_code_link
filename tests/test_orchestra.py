@@ -179,7 +179,7 @@ class OrchestraTests(unittest.TestCase):
         self.assertEqual(task_named(state, "Login form")["lead"], "shop/chatgpt")
         self.assertEqual(task_named(state, "Login form")["status"], "active")
 
-    def test_a_dropped_player_can_rejoin_and_a_new_player_can_enter(self) -> None:
+    def test_a_quiet_player_stays_on_the_part(self) -> None:
         state = orchestra.empty_state()
         early = "2026-10-25T04:00:00Z"
         later = "2026-10-25T04:00:30Z"
@@ -193,21 +193,12 @@ class OrchestraTests(unittest.TestCase):
                 {"title": "Session API", "brief": "Own the session", "skills": ["api"]},
             ],
         )
-        state["agents"]["home/claude"]["lastSeen"] = later
-        lost = orchestra.sweep(state, later, limit=20)
-        self.assertEqual(lost, ["office/cursor"])
-        self.assertFalse(state["agents"]["office/cursor"]["connected"])
-        self.assertEqual(task_named(state, "Session API")["status"], "waiting")
-        self.assertIn("connection lost", orchestra.render_view(state, "home/claude"))
-        with self.assertRaises(orchestra.OrchestraError):
-            orchestra.say(state, "office/cursor", "still here", now=later)
-        orchestra.join(state, "studio", "hermes", ["ui"], later)
-        self.assertNotEqual(state["agents"]["studio/hermes"].get("task"), task_named(state, "Session API")["id"])
-        self.assertEqual(task_named(state, "Session API")["status"], "waiting")
-        orchestra.finish(state, "home/claude", now=later)
-        self.assertEqual(state["agents"]["home/claude"]["task"], task_named(state, "Session API")["id"])
+        state["agents"]["office/cursor"]["lastSeen"] = early
+        self.assertTrue(state["agents"]["office/cursor"]["connected"])
         self.assertEqual(task_named(state, "Session API")["status"], "active")
-        self.assertEqual(task_named(state, "Session API")["lead"], "home/claude")
+        self.assertIn("office/cursor", task_named(state, "Session API")["members"])
+        self.assertNotIn("connection lost", orchestra.render_view(state, "home/claude"))
+        orchestra.say(state, "office/cursor", "still here", now=later)
 
     def test_only_the_conductor_publishes_the_plan(self) -> None:
         state = orchestra.empty_state()

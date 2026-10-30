@@ -65,6 +65,9 @@ def build_parser() -> argparse.ArgumentParser:
     finish.add_argument("--task")
     finish.add_argument("--approach", help="Approach for the next part, if you lead it")
 
+    done = commands.add_parser("complete", help="Lead or conductor: close a part for everyone on it")
+    done.add_argument("--task", required=True)
+
     help_cmd = commands.add_parser("help-on", help="Jump in on a teammate's part")
     help_cmd.add_argument("--task", required=True)
 
@@ -227,6 +230,13 @@ def main(argv: list[str] | None = None) -> int:
             require_clean(root)
             payload = liveclient._request(root, "POST", "/v1/help", {"task": args.task})
             show(payload, align_code(root, payload))
+            return 0
+        if args.command == "complete":
+            before = liveclient._request(root, "GET", "/v1/room")
+            payload = liveclient._request(root, "POST", "/v1/complete", {"task": args.task})
+            notes = return_finished(root, int(before.get("seq") or 0), payload)
+            notes.extend(align_code(root, payload))
+            show(payload, notes)
             return 0
         if args.command == "partition":
             print(liveclient.post("/v1/partition", {"task": args.task, "on": not args.off}, root))

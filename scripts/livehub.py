@@ -7,6 +7,7 @@ import json
 import os
 import secrets
 import socket
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,9 +16,13 @@ from urllib.parse import parse_qs, urlparse
 
 import orchestra
 
-WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
+def web_root() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS")) / "web"
+    return Path(__file__).resolve().parents[1] / "web"
 
 TOKEN_NAME = "room.token"
+HOST_TOKEN_NAME = "host.token"
 STATE_NAME = "room.json"
 
 
@@ -27,26 +32,14 @@ class Hub:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.cond = threading.Condition()
         self.room_token = ""
+        self.host_token = ""
         self.state = orchestra.empty_state()
         self._closed = False
         self._caller = threading.local()
         self._load()
-        self._sweeper = threading.Thread(target=self._sweep_loop, daemon=True)
-        self._sweeper.start()
 
     def close(self) -> None:
         self._closed = True
-
-    def _sweep_loop(self) -> None:
-        while not self._closed:
-            time.sleep(1)
-            with self.cond:
-                if self._closed:
-                    return
-                try:
-                    self._sweep_locked()
-                except OSError:
-                    return
 
     def _heartbeat_locked(self, viewer: str | None) -> None:
         if not viewer:
@@ -54,13 +47,6 @@ class Hub:
         player = self.state["agents"].get(viewer)
         if player and player.get("connected", True):
             player["lastSeen"] = orchestra.utc_now()
-
-    def _sweep_locked(self) -> None:
-        before = self.state["seq"]
-        orchestra.sweep(self.state)
-        if self.state["seq"] != before:
-            self._save()
-            self.cond.notify_all()
 
     def _load(self) -> None:
         token_path = self.data_dir / TOKEN_NAME
@@ -70,6 +56,12 @@ class Hub:
         if not self.room_token:
             self.room_token = secrets.token_urlsafe(24)
             token_path.write_text(self.room_token + "\n", encoding="utf-8")
+        host_path = self.data_dir / HOST_TOKEN_NAME
+        if host_path.exists():
+            self.host_token = host_path.read_text(encoding="utf-8").strip()
+        if not self.host_token:
+            self.host_token = secrets.token_urlsafe(24)
+            host_path.write_text(self.host_token + "\n", encoding="utf-8")
         if state_path.exists():
             loaded = json.loads(state_path.read_text(encoding="utf-8"))
             if isinstance(loaded, dict) and loaded.get("version") == 1:
@@ -93,6 +85,10 @@ class Hub:
             return False
         return secrets.compare_digest(token, self.room_token)
 
+    def is_host(self, token: str) -> bool:
+        """The host token stays in the host's data folder. The share link does not carry it."""
+        return bool(token) and bool(self.host_token) and secrets.compare_digest(token, self.host_token)
+
     def player_key(self, agent_token: str) -> str | None:
         if not agent_token:
             return None
@@ -105,7 +101,6 @@ class Hub:
     def update(self, fn):
         with self.cond:
             self._heartbeat_locked(getattr(self._caller, "viewer", None))
-            self._sweep_locked()
             result = fn(self.state)
             self._save()
             self.cond.notify_all()
@@ -114,7 +109,6 @@ class Hub:
     def view(self, viewer: str | None) -> dict:
         with self.cond:
             self._heartbeat_locked(viewer)
-            self._sweep_locked()
             reveal = bool(viewer) and viewer == self.state.get("conductor")
             events = [
                 {
@@ -139,7 +133,6 @@ class Hub:
         deadline = time.monotonic() + timeout
         with self.cond:
             self._heartbeat_locked(viewer)
-            self._sweep_locked()
             while True:
                 visible = [
                     event
@@ -254,14 +247,14 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             if path == "/":
-                self._send_file(WEB_ROOT / "index.html", "text/html; charset=utf-8")
+                self._send_file(web_root() / "index.html", "text/html; charset=utf-8")
                 return
             if path.startswith("/assets/"):
                 rel = path[len("/assets/") :]
                 if not rel or ".." in Path(rel).parts:
                     self._send(404, {"error": "Not found."})
                     return
-                asset_root = (WEB_ROOT / "assets").resolve()
+                asset_root = (web_root() / "assets").resolve()
                 target = (asset_root / rel).resolve()
                 if not target.is_relative_to(asset_root) or not target.is_file():
                     self._send(404, {"error": "Not found."})
@@ -311,8 +304,19 @@ class Handler(BaseHTTPRequestHandler):
                 player = str(payload.get("player") or "").strip()
                 if not player:
                     raise orchestra.OrchestraError("Name the player to remove, such as home/cursor.")
-                self.hub.update(lambda state: orchestra.leave(state, player, removed=True))
-                self._send(200, self.hub.view(self._viewer()))
+                caller = self._viewer()
+                host = self.hub.is_host(self.headers.get("X-Host-Token", "").strip())
+
+                def drop(state: dict) -> None:
+                    if not host:
+                        if not caller:
+                            raise orchestra.OrchestraError("Log in as an agent before removing a seat.")
+                        if caller != player and caller != state.get("conductor"):
+                            raise orchestra.OrchestraError("Only that player, the conductor, or the host can remove this seat.")
+                    orchestra.leave(state, player, removed=True)
+
+                self.hub.update(drop)
+                self._send(200, self.hub.view(caller))
                 return
             viewer = self._viewer()
             self._caller_set(viewer)
@@ -339,6 +343,18 @@ class Handler(BaseHTTPRequestHandler):
             self.hub.update(lambda state: orchestra.leave(state, viewer))
         elif path == "/v1/conduct":
             self.hub.update(lambda state: orchestra.conduct(state, viewer, successor=payload.get("player") or None))
+        elif path == "/v1/project":
+            self.hub.update(lambda state: orchestra.set_project(state, viewer, payload.get("name") or ""))
+        elif path == "/v1/source":
+            self.hub.update(lambda state: orchestra.choose_source(state, viewer, payload.get("seat") or ""))
+        elif path == "/v1/source-ready":
+            self.hub.update(lambda state: orchestra.mark_source_ready(state, viewer))
+        elif path == "/v1/source-path":
+            self.hub.update(lambda state: orchestra.publish_source(state, viewer, payload.get("path") or ""))
+        elif path == "/v1/lock":
+            self.hub.update(lambda state: orchestra.claim_file(state, viewer, payload.get("path") or ""))
+        elif path == "/v1/unlock":
+            self.hub.update(lambda state: orchestra.release_file(state, viewer, payload.get("path") or ""))
         elif path == "/v1/plan":
             self.hub.update(lambda state: orchestra.publish_plan(state, viewer, payload))
         elif path == "/v1/say":
@@ -360,6 +376,8 @@ class Handler(BaseHTTPRequestHandler):
                     payload.get("approach") or None,
                 )
             )
+        elif path == "/v1/complete":
+            self.hub.update(lambda state: orchestra.complete(state, viewer, payload.get("task", "")))
         elif path == "/v1/help":
             self.hub.update(lambda state: orchestra.help_on(state, viewer, payload.get("task", "")))
         elif path == "/v1/partition":
@@ -470,9 +488,10 @@ def describe_links(server: ThreadingHTTPServer, public_url: str | None = None) -
     return "\n".join(lines)
 
 
-def serve_forever(host: str, port: int, data_dir: Path, public_url: str | None = None) -> None:
+def serve_forever(host: str, port: int, data_dir: Path, public_url: str | None = None, quiet: bool = False) -> None:
     server = make_server(host, port, data_dir)
-    print(describe_links(server, public_url), flush=True)
+    if not quiet:
+        print(describe_links(server, public_url), flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

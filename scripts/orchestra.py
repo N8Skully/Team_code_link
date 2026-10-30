@@ -11,7 +11,6 @@ and follow that lead's approach.
 from __future__ import annotations
 
 import copy
-import os
 import re
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -95,9 +94,10 @@ def guard_shared_text(text: str) -> None:
     """Reject anything that would hand another computer a login or a database."""
     patterns = (
         r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|rediss|amqp|amqps|ssh|sftp)://\S+",
-        r"\b(password|passwd|api[_-]?key|secret|token)\b\s*[:=]",
+        r"\b(password|passwd|api[_-]?key|secret|token)\b\s*[:=]\s*[^\s,;]{8,}",
+        r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\bsk-[A-Za-z0-9_-]{16,}|\bgh[pousr]_[A-Za-z0-9]{30,}|\bxox[abpr]-[A-Za-z0-9-]{10,}",
         r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
-        r"\b(ssh|scp|sftp)\s+\S+",
+        r"(?:^|[\s;&|`$(])(?:ssh|scp|sftp)\s+(?:-\S+\s+)*[\w.-]+@[\w.-]+",
         r"\b(psql|mysql|mariadb|redis-cli|mongosh|sqlcmd)\b[^\n]*\s(?:-h|--host(?:=|\s))\s*\S+",
     )
     for pattern in patterns:
@@ -132,9 +132,197 @@ def empty_state() -> dict:
         "agents": {},
         "plan": None,
         "tasks": [],
+        "project": "",
+        "source": {"seat": "", "path": "", "ready": False},
+        "handoff": "",
         "next_task": 1,
         "next_message": 0,
     }
+
+
+PROJECT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,40}$")
+
+
+def project_name(value: str) -> str:
+    name = str(value).strip()
+    if not PROJECT_RE.fullmatch(name):
+        raise OrchestraError("Name the project with letters, numbers, and hyphens, such as ToolsProject.")
+    return name
+
+
+def _source(state: dict) -> dict:
+    raw = state.get("source")
+    if not isinstance(raw, dict):
+        raw = {}
+        state["source"] = raw
+    raw.setdefault("seat", "")
+    raw.setdefault("path", "")
+    raw.setdefault("ready", False)
+    state.setdefault("project", "")
+    state.setdefault("handoff", "")
+    return raw
+
+
+def share_path(value: str) -> str:
+    text = str(value).strip()
+    guard_shared_text(text)
+    if not text.startswith("\\\\") or text.startswith("\\\\?\\"):
+        raise OrchestraError("The share path looks like \\\\computer\\ToolsProject.")
+    parts = [part for part in text[2:].split("\\") if part != ""]
+    if len(parts) < 2 or any(part in (".", "..") for part in parts):
+        raise OrchestraError("The share path looks like \\\\computer\\ToolsProject.")
+    return "\\\\" + "\\".join(parts)
+
+
+def set_project(state: dict, key: str, name: str, now: str | None = None) -> None:
+    moment = now or utc_now()
+    _require_conductor(state, key)
+    chosen = project_name(name)
+    state["project"] = chosen
+    _touch(state["agents"][key], moment)
+    _event(state, "project", f"{key} set the project to {chosen}.", at=moment, agent=key)
+
+
+def choose_source(state: dict, key: str, seat: str, now: str | None = None) -> None:
+    """The conductor names the one computer whose folder everyone opens."""
+    moment = now or utc_now()
+    _require_conductor(state, key)
+    chosen = normalize_name(seat, "Computer")
+    if chosen not in state["seats"]:
+        raise OrchestraError(f"{chosen} is not in the room.")
+    if not state.get("project"):
+        raise OrchestraError("Name the project before choosing the source computer.")
+    source = _source(state)
+    if not source["seat"] or source["seat"] == chosen:
+        source["seat"] = chosen
+        source["ready"] = False
+        state["handoff"] = ""
+        if source["seat"] == chosen and source["path"] and not state["handoff"]:
+            _event(state, "source", f"{chosen} is the source.", at=moment, agent=key)
+            return
+        source["path"] = ""
+        _event(state, "source", f"{chosen} is the source. That computer will share {state['project']}.", at=moment, agent=key)
+        return
+    state["handoff"] = chosen
+    source["ready"] = False
+    _touch(state["agents"][key], moment)
+    _event(
+        state,
+        "handoff",
+        f"{key} is handing the source from {source['seat']} to {chosen}. {source['seat']} commits, then {chosen} copies the folder.",
+        at=moment,
+        agent=key,
+    )
+
+
+def mark_source_ready(state: dict, key: str, now: str | None = None) -> None:
+    moment = now or utc_now()
+    player = require_agent(state, key)
+    source = _source(state)
+    if player["seat"] != source["seat"]:
+        raise OrchestraError("Only the current source can commit the project.")
+    if not state.get("handoff"):
+        raise OrchestraError("No handoff is waiting.")
+    source["ready"] = True
+    _touch(player, moment)
+    _event(
+        state,
+        "ready",
+        f"{source['seat']} committed {state.get('project') or 'the project'}. {state['handoff']} can copy it.",
+        at=moment,
+        agent=key,
+    )
+
+
+def publish_source(state: dict, key: str, path: str, now: str | None = None) -> None:
+    moment = now or utc_now()
+    player = require_agent(state, key)
+    source = _source(state)
+    unc = share_path(path)
+    handoff = state.get("handoff") or ""
+    if handoff:
+        if player["seat"] != handoff:
+            raise OrchestraError("The next source publishes the new path.")
+        if not source.get("ready"):
+            raise OrchestraError("The current source has not committed yet.")
+        previous = source["seat"]
+        source["seat"] = handoff
+        source["path"] = unc
+        source["ready"] = False
+        state["handoff"] = ""
+        _touch(player, moment)
+        _event(
+            state,
+            "source",
+            f"{handoff} is the source at {unc}. {previous} can remove the old share.",
+            at=moment,
+            agent=key,
+        )
+        return
+    if player["seat"] != source["seat"]:
+        raise OrchestraError("Only the source computer publishes the share path.")
+    source["path"] = unc
+    source["ready"] = False
+    _touch(player, moment)
+    _event(state, "source", f"Open {unc} in Cursor. Saves land on {source['seat']}. One agent claims a file before saving it.", at=moment, agent=key)
+
+
+def file_key(value: str) -> str:
+    text = str(value).strip().replace("\\", "/")
+    if text.startswith("//"):
+        parts = [part for part in text.split("/") if part]
+        text = "/".join(parts[2:]) if len(parts) >= 3 else ""
+    text = text.lstrip("/")
+    parts = text.split("/")
+    if not text or ":" in text or any(part in ("", ".", "..") for part in parts):
+        raise OrchestraError("Name a file inside the project, such as src/app.py.")
+    return "/".join(parts)
+
+
+def _locks(state: dict) -> dict:
+    raw = state.get("locks")
+    if not isinstance(raw, dict):
+        raw = {}
+        state["locks"] = raw
+    return raw
+
+
+def claim_file(state: dict, key: str, path: str, now: str | None = None) -> None:
+    moment = now or utc_now()
+    require_agent(state, key)
+    name = file_key(path)
+    locks = _locks(state)
+    current = locks.get(name)
+    if isinstance(current, dict) and current.get("holder") not in (None, "", key):
+        raise OrchestraError(f"{current['holder']} is editing {name}.")
+    locks[name] = {"holder": key}
+    _touch(state["agents"][key], moment)
+    if not isinstance(current, dict) or current.get("holder") != key:
+        _event(state, "lock", f"{key} is editing {name}.", at=moment, agent=key)
+
+
+def release_file(state: dict, key: str, path: str, now: str | None = None) -> None:
+    moment = now or utc_now()
+    player = require_agent(state, key)
+    name = file_key(path)
+    locks = _locks(state)
+    current = locks.get(name)
+    if not isinstance(current, dict):
+        return
+    holder = current.get("holder")
+    if holder != key and state.get("conductor") != key:
+        raise OrchestraError(f"{holder} is editing {name}.")
+    del locks[name]
+    _touch(player, moment)
+    _event(state, "unlock", f"{key} released {name}.", at=moment, agent=key)
+
+
+def release_player_locks(state: dict, key: str, moment: str) -> None:
+    locks = _locks(state)
+    for name, current in list(locks.items()):
+        if isinstance(current, dict) and current.get("holder") == key:
+            del locks[name]
+            _event(state, "unlock", f"{key} released {name}.", at=moment, agent=key)
 
 
 def agent_key(seat: str, agent: str) -> str:
@@ -178,20 +366,6 @@ def _touch(agent: dict, now: str) -> None:
     agent["lastSeen"] = now
 
 
-def stale_after() -> int:
-    raw = os.environ.get("TEAM_LINK_STALE_SECONDS", "20")
-    try:
-        return max(1, int(raw))
-    except ValueError:
-        return 20
-
-
-def _age_seconds(last_seen: str, now: str) -> float:
-    then = datetime.strptime(last_seen, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    current = datetime.strptime(now, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    return (current - then).total_seconds()
-
-
 def join(state: dict, seat: str, agent: str, skills: list[str] | None = None, now: str | None = None, reclaim: bool = False) -> dict:
     moment = now or utc_now()
     seat_name = normalize_name(seat, "Computer")
@@ -228,7 +402,7 @@ def join(state: dict, seat: str, agent: str, skills: list[str] | None = None, no
         player["connected"] = True
         _touch(player, moment)
         _event(state, "joined", f"{key} is back.", at=moment, agent=key)
-    balance(state, at=moment)
+    balance(state, fresh=[key], at=moment)
     return player
 
 
@@ -240,6 +414,7 @@ def leave(state: dict, key: str, now: str | None = None, removed: bool = False) 
     task_id = player.get("task")
     if task_id:
         _step_off(state, key, task_id, moment, leaving=True)
+    release_player_locks(state, key, moment)
     seat_name = player["seat"]
     del state["agents"][key]
     if not any(item["seat"] == seat_name for item in state["agents"].values()):
@@ -284,8 +459,10 @@ def publish_plan(state: dict, key: str, spec: dict, now: str | None = None) -> N
         state["conductor"] = key
         _event(state, "conductor", f"{key} is the conductor.", at=moment, agent=key)
     _require_conductor(state, key)
-    if any(task["status"] == "active" for task in state["tasks"]):
-        raise OrchestraError("Finish the parts already in motion before replacing the plan.")
+    if any(task["status"] in ("active", "waiting") for task in state["tasks"]):
+        raise OrchestraError(
+            "Finish the parts already in motion, or ask the conductor to complete them, before replacing the plan."
+        )
     title = validate_text(str(spec.get("title", "")))
     framework = validate_text(str(spec.get("framework", "")))
     summary = str(spec.get("summary") or "").strip()
@@ -323,6 +500,7 @@ def publish_plan(state: dict, key: str, spec: dict, now: str | None = None) -> N
                 "lead": None,
                 "members": [],
                 "approach": brief,
+                "finished": [],
             }
         )
     state["plan"] = {
@@ -341,7 +519,7 @@ def publish_plan(state: dict, key: str, spec: dict, now: str | None = None) -> N
         at=moment,
         agent=key,
     )
-    balance(state, at=moment)
+    balance(state, fresh=_free_agents(state), at=moment)
 
 
 def set_partition(state: dict, key: str, task_id: str, on: bool, now: str | None = None) -> None:
@@ -439,7 +617,7 @@ def finish(state: dict, key: str, task_id: str | None = None, next_approach: str
         state,
         approaches={key: next_approach} if next_approach else None,
         avoid={key: current},
-        claim_waiting=[key],
+        fresh=[key],
         at=moment,
     )
 
@@ -498,7 +676,7 @@ def help_on(state: dict, key: str, task_id: str, now: str | None = None) -> None
     task = task_by_id(state, task_id)
     if task["status"] == "done":
         raise OrchestraError(f"{task['title']} is already complete.")
-    if task["status"] == "waiting":
+    if task["status"] == "waiting" and player.get("task"):
         raise OrchestraError(
             "That part is waiting. It is picked up when a player finishes the run they are already on."
         )
@@ -508,11 +686,32 @@ def help_on(state: dict, key: str, task_id: str, now: str | None = None) -> None
             raise OrchestraError(f"Finish {current['title']} before you jump in on {task['title']}.")
     if not can_hear(state, key, task) and key not in task["members"]:
         raise OrchestraError("That part is partitioned. The conductor or the lead can bring you in.")
-    if task["status"] == "open":
+    if task["status"] in ("open", "waiting"):
         _become_lead(state, task, key, None, moment)
     elif key not in task["members"]:
         _join_part(state, task, key, moment, "helping")
     _touch(player, moment)
+
+
+def complete(state: dict, key: str, task_id: str, now: str | None = None) -> None:
+    """The lead or the conductor closes a part for everyone on it."""
+    moment = now or utc_now()
+    require_agent(state, key)
+    task = task_by_id(state, task_id)
+    if task["status"] == "done":
+        raise OrchestraError(f"{task['title']} is already complete.")
+    if key != state["conductor"] and key != task["lead"]:
+        raise OrchestraError("Only the conductor or the part lead can complete this part.")
+    for member in list(task["members"]):
+        player = state["agents"].get(member)
+        if player and player.get("task") == task_id:
+            player["task"] = None
+    task["members"] = []
+    task["lead"] = None
+    task["status"] = "done"
+    _touch(state["agents"][key], moment)
+    _event(state, "done", f"{key} completed {task['title']}.", at=moment, agent=key, task=task_id)
+    balance(state, fresh=[member for member in state["agents"] if state["agents"][member].get("task") is None], at=moment)
 
 
 def can_hear(state: dict, key: str | None, task: dict) -> bool:
@@ -527,7 +726,7 @@ def can_hear(state: dict, key: str | None, task: dict) -> bool:
 
 def event_visible(state: dict, event: dict, viewer: str | None, reveal_all: bool = False) -> bool:
     task_id = event.get("task")
-    if not task_id or event.get("type") in {"partition", "done", "stepped", "lead"}:
+    if not task_id or event.get("type") in {"partition", "done", "stepped", "lead", "dropped"}:
         return True
     try:
         task = task_by_id(state, task_id)
@@ -556,8 +755,12 @@ def visible_messages(state: dict, key: str | None, reveal_all: bool = False) -> 
     return chosen
 
 
-def _step_off(state: dict, key: str, task_id: str, moment: str, leaving: bool, dropped: bool = False) -> None:
+def _step_off(state: dict, key: str, task_id: str, moment: str, leaving: bool) -> None:
     task = task_by_id(state, task_id)
+    if not leaving:
+        done_by = task.setdefault("finished", [])
+        if key not in done_by:
+            done_by.append(key)
     if key in task["members"]:
         task["members"].remove(key)
     player = state["agents"].get(key)
@@ -574,50 +777,24 @@ def _step_off(state: dict, key: str, task_id: str, moment: str, leaving: bool, d
                 agent=task["lead"],
                 task=task_id,
             )
-    if task["status"] == "active" and not task["members"]:
+    if task["status"] == "active" and not task["members"] and leaving:
         task["lead"] = None
-        if dropped:
-            task["status"] = "waiting"
-            _event(
-                state,
-                "waiting",
-                f"{task['title']} is waiting until another player finishes their run.",
-                at=moment,
-                agent=key,
-                task=task_id,
-            )
-        else:
-            task["status"] = "done"
-            _event(state, "done", f"{key} completed {task['title']}.", at=moment, agent=key, task=task_id)
+        task["status"] = "waiting"
+        _event(
+            state,
+            "dropped",
+            f"{key} dropped {task['title']} before it was finished. It is waiting for the next free player and keeps its approach and branch.",
+            at=moment,
+            agent=key,
+            task=task_id,
+        )
+    elif task["status"] == "active" and not task["members"]:
+        task["lead"] = None
+        task["status"] = "done"
+        _event(state, "done", f"{key} completed {task['title']}.", at=moment, agent=key, task=task_id)
     elif task["status"] == "active":
-        if dropped:
-            verb = "lost connection during"
-        elif leaving:
-            verb = "left"
-        else:
-            verb = "finished their share of"
+        verb = "left" if leaving else "finished their share of"
         _event(state, "stepped", f"{key} {verb} {task['title']}.", at=moment, agent=key, task=task_id)
-
-
-def sweep(state: dict, now: str | None = None, limit: int | None = None) -> list[str]:
-    """Release parts held by players who stopped answering."""
-    moment = now or utc_now()
-    window = stale_after() if limit is None else limit
-    lost: list[str] = []
-    for key in sorted(state["agents"]):
-        player = state["agents"][key]
-        if not player.get("connected", True):
-            continue
-        seen = player.get("lastSeen")
-        if not seen or _age_seconds(seen, moment) <= window:
-            continue
-        player["connected"] = False
-        task_id = player.get("task")
-        if task_id:
-            _step_off(state, key, task_id, moment, leaving=True, dropped=True)
-        _event(state, "lost", f"{key} lost connection.", at=moment, agent=key)
-        lost.append(key)
-    return lost
 
 
 def _become_lead(state: dict, task: dict, key: str, approach: str | None, moment: str) -> None:
@@ -661,63 +838,61 @@ def balance(
     state: dict,
     approaches: dict | None = None,
     avoid: dict | None = None,
-    claim_waiting: list[str] | None = None,
+    fresh: list[str] | None = None,
     at: str | None = None,
 ) -> list:
+    """Place free players.
+
+    Any idle player may take a part nobody is on, waiting parts first.
+    Only fresh players, who just joined, just finished, or just saw a new plan,
+    are sent to help on a part that already has people. A player who finished
+    and found nothing to do stays idle, so a later finish cannot pull them back
+    onto a part they already left.
+    """
     moment = at or utc_now()
     approaches = approaches or {}
     avoid = avoid or {}
+    fresh_keys = [key for key in (fresh or []) if key in state["agents"]]
     free = _free_agents(state)
-    waiting = [task for task in state["tasks"] if task["status"] == "waiting"]
-    for key in claim_waiting or []:
-        if key not in free or not waiting:
-            continue
-        ranked = [
-            (score(state, key, task), task["n"], task)
-            for task in waiting
-            if avoid.get(key) != task["id"]
-        ]
-        if not ranked:
-            continue
-        _best, _order, task = sorted(ranked, key=lambda item: (-item[0], item[1]))[0]
-        _become_lead(state, task, key, approaches.get(key), moment)
-        free.remove(key)
-        waiting.remove(task)
-    open_tasks = [task for task in state["tasks"] if task["status"] == "open"]
-    while free and open_tasks:
+    order = {"waiting": 0, "open": 1}
+    empty = [task for task in state["tasks"] if task["status"] in order and not task["members"]]
+    while free and empty:
         ranked = []
-        for task in open_tasks:
+        for task in empty:
             candidates = [key for key in free if avoid.get(key) != task["id"]] or list(free)
             for key in candidates:
-                ranked.append((score(state, key, task), task["n"], key, task))
-        if not ranked:
-            break
-        _best, _order, key, task = sorted(ranked, key=lambda item: (-item[0], item[1], item[2]))[0]
+                ranked.append((order[task["status"]], -score(state, key, task), task["n"], key, task))
+        _w, _s, _n, key, task = sorted(ranked, key=lambda item: item[:4])[0]
         _become_lead(state, task, key, approaches.get(key), moment)
         free.remove(key)
-        open_tasks.remove(task)
+        empty.remove(task)
+    helpers = [key for key in free if key in fresh_keys]
     needy = [task for task in state["tasks"] if task["status"] == "active" and len(task["members"]) < 2]
-    for key in list(free):
-        pool = [task for task in needy if task["id"] != avoid.get(key)]
+    for key in list(helpers):
+        pool = [
+            task
+            for task in needy
+            if task["id"] != avoid.get(key) and key not in task["members"] and key not in task.get("finished", [])
+        ]
         if not pool:
             continue
         chosen = _best_task(state, key, pool, {})
         _join_part(state, chosen, key, moment, "pairing")
-        free.remove(key)
+        helpers.remove(key)
         if len(chosen["members"]) >= 2 and chosen in needy:
             needy.remove(chosen)
     carrying = [task for task in state["tasks"] if task["status"] == "active"]
-    for key in list(free):
+    for key in list(helpers):
         options = [
             task
             for task in carrying
-            if key not in task["members"] and task["id"] != avoid.get(key)
+            if key not in task["members"] and task["id"] != avoid.get(key) and key not in task.get("finished", [])
         ]
         if not options:
             continue
         chosen = sorted(options, key=lambda task: (len(task["members"]), -score(state, key, task), task["n"]))[0]
         _join_part(state, chosen, key, moment, "helping")
-        free.remove(key)
+        helpers.remove(key)
     return []
 
 
@@ -794,6 +969,7 @@ def public_state(state: dict, viewer: str | None) -> dict:
                 "connected": player.get("connected", True),
             }
         )
+    source = _source(state)
     return {
         "conductor": state["conductor"],
         "seats": sorted(state["seats"]),
@@ -801,6 +977,18 @@ def public_state(state: dict, viewer: str | None) -> dict:
         "capacity": MAX_SEATS,
         "agents": agents,
         "plan": copy.deepcopy(state["plan"]),
+        "project": state.get("project") or "",
+        "source": {
+            "seat": source.get("seat") or "",
+            "path": source.get("path") or "",
+            "ready": bool(source.get("ready")),
+        },
+        "handoff": state.get("handoff") or "",
+        "locks": [
+            {"file": name, "holder": info.get("holder")}
+            for name, info in sorted(_locks(state).items())
+            if isinstance(info, dict)
+        ],
         "tasks": tasks,
         "messages": visible_messages(state, viewer, reveal_all=conductor_view)[-30:],
         "seq": state["seq"],
@@ -813,6 +1001,16 @@ def render_view(state: dict, viewer: str | None) -> str:
     lines = ["Team Code Link live room", ROOM_BANNER, ""]
     lines.append(f"Conductor: {snap['conductor'] or 'open'}")
     lines.append(f"Computers: {snap['seatCount']}/{MAX_SEATS}")
+    if snap.get("project"):
+        lines.append(f"Project: {snap['project']}")
+    source = snap.get("source") or {}
+    if source.get("seat"):
+        where = f" at {source['path']}" if source.get("path") else ""
+        lines.append(f"Source: {source['seat']}{where}")
+    if snap.get("handoff"):
+        lines.append(f"Handoff: {snap['handoff']}")
+    for lock in snap.get("locks") or []:
+        lines.append(f"Editing: {lock['holder']} {lock['file']}")
     if snap["agents"]:
         labels = []
         for player in snap["agents"]:
