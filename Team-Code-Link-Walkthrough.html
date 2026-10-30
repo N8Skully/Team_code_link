@@ -78,7 +78,7 @@
   <tr><td>Source</td><td>The one computer whose folder is the real copy of the project. Everyone else opens that folder. Only one computer is the source at a time.</td></tr>
   <tr><td>Share path</td><td>The address of that folder, written like <code>\\office\Shared</code>. The word before the second slash is the host computer. The last word is the project name. If the computer has no usable name, the address uses the <code>100.</code> number instead, like <code>\\100.125.156.83\Shared</code>.</td></tr>
   <tr><td>Conductor</td><td>The person in charge of the room. The host becomes the conductor when they click Host and share. The conductor can hear every part and can send instructions once a plan exists.</td></tr>
-  <tr><td>Part</td><td>One piece of the job, such as “the canvas” or “the toolbar.” A plan is the list of parts. The window does not have a button that creates that list yet. Section 9 explains how a plan gets published.</td></tr>
+  <tr><td>Part</td><td>One piece of the job, such as “the canvas” or “the toolbar.” A plan is the list of parts. The host and the host’s agent agree on that list. Section 9 is when the host says the plan is a go.</td></tr>
   <tr><td>Skill</td><td>A named ability already installed on that computer, read from a file called <code>SKILL.md</code>. The agent brings the checked skills into the room. You do not type skill names by hand.</td></tr>
 </table>
 
@@ -226,24 +226,22 @@ New-NetFirewallRule -DisplayName "Team Code Link room" -Direction Inbound -Proto
   <p>You do not install every agent. Install the one this computer will run. A computer that only joins the room and opens the shared folder does not need any of them.</p>
 </div>
 
-<h2>9. Give the agents a plan</h2>
+<h2>9. The host and their agent make the plan</h2>
 <p>A plan is the list of parts and one sentence that says how those parts connect. Example: two parts named Canvas and Tools, and the sentence “The toolbar calls the canvas. The canvas is the only writer of the picture.”</p>
-<p>The Team Code Link window does not have a button that creates this list. Hosting, joining, sharing the folder, and connecting an agent all work without a plan. The instruction boxes on the Live tab appear only after a plan exists, and only for the conductor.</p>
-<p>To publish a plan, the host uses the project source and a small text file. On the host, create a file named <code>plan.json</code> in the project folder you chose in section 6. Put this in it, and change the titles to match the real work:</p>
-<pre>{
-  "title": "Shared project",
-  "framework": "Say, in one sentence, how the parts call each other.",
-  "tasks": [
-    { "title": "First part", "brief": "What this part is responsible for." },
-    { "title": "Second part", "brief": "What this part is responsible for." }
-  ]
-}</pre>
-<p><code>title</code> is the name of the whole job. <code>framework</code> is the one sentence everyone follows. Each item in <code>tasks</code> is one part. <code>brief</code> is the short description of that part.</p>
-<p>The host window must already be open and hosting. In PowerShell, go to the project folder you chose in section 6, and point Python at <code>workspace.py</code> in the program’s source folder:</p>
-<pre>cd C:\Users\YourName\Documents\SharedProject
-py -3 "F:\Portal9\Team Code Link\Team_code_link\scripts\workspace.py" plan --file plan.json</pre>
-<p>Change the first path to the real project folder. Leave the <code>workspace.py</code> path as it is on this host. If the command says this computer is not linked, Host and share has not been clicked for that project folder yet. If it says only the conductor can do that, this seat is not the conductor. The host becomes the conductor when Host and share succeeds.</p>
-<p>After the plan is published, open <strong>Live</strong> on the host. Each part that is not finished has a text box. Write the detailed instructions for that part and click <strong>Send</strong>. Those words go to the room as that part’s approach. An agent on this computer that is assigned to that part can be started again with those words.</p>
+<p>The host does not write a file and does not use PowerShell. The host and the host’s own agent work the plan out together in the window. When the host says the plan is a go, that agent sends the plan to every agent in the room, including itself, and they start the work.</p>
+<ol class="steps">
+  <li>On the host, finish section 6 and connect the host’s agent in section 8. The other computers should already be in the room with their own agents connected.</li>
+  <li>Open the <strong>Live</strong> tab. Because this computer is the host, you see <strong>Plan with your agent</strong>.</li>
+  <li>In the box, describe the work in ordinary words. Example: “We are building a paint app. One part is the canvas. One part is the tools. The tools call the canvas, and the canvas is the only thing that changes the picture.” Click <strong>Talk</strong>.</li>
+  <li>Your agent answers in <strong>Talking</strong>, under the box. Read it. If something is wrong, type the correction and click <strong>Talk</strong> again. Keep going until the title, the one connecting sentence, and the parts are what you want.</li>
+  <li>Click <strong>The plan is a go</strong>. Your agent publishes that plan to the room. Each agent, including yours, is given a part and starts working. You see the parts next to their names under <strong>Agents</strong>.</li>
+</ol>
+<div class="see">
+  <p>The other people do not type the plan. Their agents receive their parts from the room and start. The host is the one who talks with their agent and the one who clicks The plan is a go.</p>
+</div>
+<div class="stop">
+  <p>If the red line says to connect your agent first, open the Agent tab and click Connect, then come back to Live. The plan box is only on the host’s window.</p>
+</div>
 
 <h2>10. How to share a file</h2>
 <p>There are two ways a file moves between computers. Tailscale shares the live folder, so a file saved on the host shows up for the other person immediately. GitHub is a saved copy on the internet: you send a file up to GitHub, and the other person downloads that copy. Team Code Link can use either one. It does not use Tailscale’s separate “send a file” menu. The whole project folder is the share.</p>
@@ -325,7 +323,7 @@ git pull</pre>
   <tr><td>The seat is in the room. The agent program is not running.</td><td>The name was registered. Cursor’s agent did not stay running. Click Connect again after Cursor is installed and signed in.</td></tr>
   <tr><td>The cursor program is not installed</td><td>Install Cursor on that computer, open it once, then click Connect.</td></tr>
   <tr><td>The room did not start</td><td>Another Team Code Link window is already using the room. Close it and host again.</td></tr>
-  <tr><td>Live has people, but no instruction boxes</td><td>You are not the conductor, or no plan has been published yet. Section 9.</td></tr>
+  <tr><td>The plan box is missing on Live</td><td>This computer is not the host. Only the host plans with their agent. Section 9.</td></tr>
   <tr><td>The other person cannot open the \\ path</td><td>The host is off, Tailscale is disconnected, or Host and share was not run as administrator. Section 10, Tailscale.</td></tr>
   <tr><td>git push asks you to sign in, or says authentication failed</td><td>Finish the browser sign-in Git opened. The other person must be invited as a collaborator on a private repository.</td></tr>
   <tr><td>The file is on GitHub but not on the other computer</td><td>They have an old copy. In their project folder they run git pull. Section 10, GitHub.</td></tr>
@@ -335,8 +333,8 @@ git pull</pre>
 <ul>
   <li>It does not connect the Cursor chat that is already open. Connect starts a separate Cursor agent program.</li>
   <li>That program runs one turn and exits. It does not sit in the room forever. Another turn starts when you click Connect again, or when the conductor sends new instructions to a seat that is already on an active part.</li>
-  <li>The window cannot publish the plan by itself. Section 9 is the way to publish it.</li>
-  <li>The window cannot mark a part finished or merge the parts back into one branch. Those actions exist in the older room tools. Finishing a part is <code>workspace.py finish</code>. Closing a part for everyone on it is <code>workspace.py complete --task t1</code>, run the same way as the plan command, from the project folder.</li>
+  <li>The host’s agent publishes the plan after the host clicks The plan is a go. The window does not ask anyone to write a plan file.</li>
+  <li>The window cannot mark a part finished or merge the parts back into one branch.</li>
   <li>A person saving outside Cursor is not blocked by the file lock.</li>
   <li>An agent name other than <code>cursor</code> connects only when a program with that exact name is installed. Only Cursor is wired to the room tools by the Connect button.</li>
   <li>Choosing GitHub in the window copies the repository into the folder once. It does not push later files. Section 10 is how you send those files up with git push, and how the other person downloads them with git pull.</li>
