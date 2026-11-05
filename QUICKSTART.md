@@ -1,141 +1,41 @@
 # Quick start
 
-One computer hosts the room. Every computer that plays joins it, including the host. The full guide is [HOW-TO.md](HOW-TO.md).
+One computer hosts. The others join with an eight-character room code. The full clicks are in [Team-Code-Link-Walkthrough.pdf](Team-Code-Link-Walkthrough.pdf).
 
-On Windows, download [Team.Code.Link.exe](https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe). That file is the program. You do not need to build it.
+Download [Team.Code.Link.exe](https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe) on every computer. You do not build it to get started.
 
-You need Python 3.9 or newer when you are running from the source instead of the downloaded program.
+## Every computer
 
-```bash
-git clone https://github.com/N8Skully/Team_code_link.git
-cd Team_code_link
-```
+1. Install Tailscale for Windows and sign into the same tailnet. Invite the other people from the Tailscale admin users page. They must accept.
+2. Open Team Code Link. The top bar must say Tailscale is connected and show an address that starts with `100.`
 
-## How to host
+## Host
 
-Do this on one computer only. That computer is the host. Leave its window open for the whole session. Closing it stops the room for everyone.
+1. Right-click `Team.Code.Link.exe` and choose **Run as administrator**.
+2. On **Connection**, choose **Host the room**. Name the project. Name this computer. Pick the agent. Choose an empty folder for the project. Leave the project on this computer, shared with Tailscale.
+3. Click **Host and share**. Leave the window open.
+4. Send the eight-character code from the top bar. Send the code, not a web address.
+5. Open **Agent** and click **Connect** if the agent is not already running.
 
-On Windows, double-click the downloaded `Team.Code.Link.exe`. Run it as administrator on the computer that will share the project folder. The first time, it installs Cloudflare Tunnel. Windows may ask you to approve that once. The window then prints:
+If the red line says to run as administrator, close the window and start it that way again. Host and share also opens the room door on the Tailscale adapter. The public internet stays closed.
 
-- **This computer** works only on the host. It starts with `127.0.0.1`. Do not send it to anyone else.
-- **Share this link** is the invite. Send that whole line. It works from any network, including another state.
+## Join
 
-The share link changes each time you start the host window. Send the new one.
+1. On **Connection**, choose **Join a room**.
+2. Type the eight-character code. Use a different computer name from the host.
+3. Click **Join**.
+4. Open **Agent**, pick the program this computer will run, and click **Connect**.
 
-Same Wi-Fi only, with no internet link: `Team Code Link.exe --local`.
+## The plan
 
-On Mac or Linux, point a tunnel at port 8765, then:
+On the host, open **Live**. Type the work in **Plan with your agent** and click **Talk**. Read the agent's answer under **Talking**. When the parts are right, click **The plan is a go**.
 
-```bash
-python3 scripts/workspace.py serve --public-url https://your-tunnel.example
-```
+That agent publishes the plan. The other agents receive their parts and start. You do not write a plan file.
 
-If you already have a public address, Windows can use it too: `Team Code Link.exe --public-url https://your-tunnel.example`.
+## When a part is done
 
-The host does not have to play. Hosting is just this window. If someone on the host computer is also an agent, they join in the next section like everyone else.
+On **Live**, click **Finish my share**. The host can click **Close this part**. Finished means that share is done. The files are not merged until the last share is finished or the host closes the part. Then, if the folder is a GitHub project, that result is pushed to main and Live says Merged to GitHub. After the folder is quiet, the source computer also pushes ordinary saves. A held file changed by another editor is put back.
 
-A computer that does not have the program yet downloads [Team.Code.Link.exe](https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe). Build only when you are changing the program itself:
+## Hand the folder to someone else
 
-```powershell
-powershell -File scripts\build_exe.ps1
-```
-
-## How to join
-
-Each player joins from their own computer. Download `Team.Code.Link.exe` there. Double-click it and pass the share link: `Team Code Link.exe --join https://the-link/?token=...`. Leave that window open. A browser login only controls that one agent.
-
-### Join in the browser
-
-1. Open the share link the host sent. On the host itself, open the **This computer** link.
-2. The page shows who is already playing. You can watch before you log in.
-3. Fill in **Log in on this computer**:
-   - **Computer** is this machine, such as `home`, `office`, or `laptop`.
-   - **Agent** is who is playing, such as `claude`, `cursor`, `chatgpt`, or `hermes`.
-   - Leave **Skills** empty.
-4. Click **Log in**. The exe connects the agent on that computer and reads the skills it already has.
-
-When the agent connects, it reads the skills it already has and joins with those names. Do not type that list. A `SKILL.md` file uses the name in its frontmatter, or the folder name. Each name is lowercase letters, numbers, and hyphens, at most 22 characters.
-
-### The project folder
-
-On the board, take the podium. Name the project, such as `ToolsProject`, and choose the source computer. That computer must be signed in with Tailscale, and its exe must be running as administrator. The board then shows a path such as `\\NATE-PC\ToolsProject`. Every Cursor opens that path. Saves land on the source computer.
-
-The folder on the source computer is `%USERPROFILE%\Team Code Link Projects\ToolsProject`. Copy the project into it. It starts empty.
-
-Claim a file on the board before saving it. A second agent is refused while that claim is held. Release the file when you are done. Leaving the seat releases it too.
-
-To join twice from one PC, open a private window and log in with a different computer name and agent.
-
-### Join in the terminal
-
-Do this on every computer that will edit the project or run an agent. Clone the repo there first, then paste the whole share link:
-
-```bash
-python3 scripts/workspace.py link "https://THE-SHARE-LINK/?token=..."
-```
-
-On Windows, use `py -3` instead of `python3`.
-
-The agent then connects and brings its skills. The same join by hand looks like this:
-
-```bash
-python3 scripts/workspace.py join --name office --agent cursor --skill blender-lighting --skill unity-developer
-```
-
-`link` saves the room on that computer. `join` takes the seat. Up to six computers can be in the room.
-
-If the browser on that computer already logged in as `office/cursor`, the terminal cannot take that same agent. Leave the seat on the page first, or use a different agent name.
-
-## Publish a plan
-
-On the conductor's computer, after that computer has joined in the terminal:
-
-```bash
-python3 scripts/workspace.py conduct
-```
-
-Save this as `plan.json`:
-
-```json
-{
-  "title": "Ship login",
-  "summary": "A form and the session API, as one piece.",
-  "framework": "The login form calls the session API. The API is the only writer of session state.",
-  "tasks": [
-    {
-      "title": "Login form",
-      "brief": "Draw the form and post credentials.",
-      "skills": ["ui"],
-      "connects": ["Session API"]
-    },
-    {
-      "title": "Session API",
-      "brief": "Create and read the session.",
-      "skills": ["api"],
-      "connects": ["Login form"]
-    }
-  ]
-}
-```
-
-```bash
-python3 scripts/workspace.py plan --file plan.json
-python3 scripts/workspace.py room
-```
-
-Reload the board. Players show up on the parts that match their skills.
-
-When you are ready to edit code:
-
-```bash
-python3 scripts/workspace.py sync
-python3 scripts/workspace.py say --text "Starting my part."
-```
-
-When the work is committed and the folder is clean:
-
-```bash
-python3 scripts/workspace.py finish --approach "Document the seam in one page."
-```
-
-Next: [How to host](HOW-TO.md#how-to-host) and [How to join](HOW-TO.md#how-to-join) in the full manual.
+On the host's **Live** tab, choose another computer and click **Hand the source**. That computer must be running Team Code Link. It copies the folder and then shares it. The Live tab says who the folder is moving to.

@@ -106,6 +106,7 @@
     </label>
     <label id="a-other-label" hidden>Program name<input id="a-other" autocomplete="off" placeholder="The command name, such as gemini"></label>
     <p id="agent-how"></p>
+    <p>Connect starts a new run and continues that program's last session in the project folder when one exists. A chat panel that is already open stays separate. After Connect, start a new chat in the project to use the room from that editor.</p>
     <button id="connect" type="button">Connect</button>
     <p id="agent-error" class="error"></p>
   </section>
@@ -158,6 +159,19 @@
       <button id="plan-go" type="button">The plan is a go</button>
       <p id="plan-error" class="error"></p>
     </div>
+    <h2>Source folder</h2>
+    <div id="source-box" hidden>
+      <p id="handoff-line"></p>
+      <label>Give the folder to
+        <select id="handoff-seat"></select>
+      </label>
+      <button id="handoff" type="button">Hand the source</button>
+      <button id="push-github" type="button">Send to GitHub</button>
+      <p id="push-line"></p>
+      <p id="source-note"></p>
+    </div>
+    <h2>Editing</h2>
+    <div id="files"></div>
     <h2>Agents</h2>
     <div id="agents"></div>
     <h2>Talking</h2>
@@ -224,7 +238,7 @@ function agentHow() {
   const chosen = document.getElementById("a-agent").value;
   const note = document.getElementById("agent-how");
   if (chosen === "other") {
-    note.textContent = "Type the command name of the program to start. Connect looks for that command on this computer.";
+    note.textContent = "Type the command name of the program to start. Connect looks for that command on this computer. Connect starts a new run in the project folder. A chat already open in the editor stays separate.";
     return;
   }
   const item = (latest.agents || []).find((agent) => agent.id === chosen);
@@ -232,7 +246,7 @@ function agentHow() {
     note.textContent = "";
     return;
   }
-  note.textContent = (item.installed ? "Installed on this computer. " : "Not installed on this computer yet. ") + item.how;
+  note.textContent = (item.installed ? "Installed on this computer. " : "Not installed on this computer yet. ") + item.how + " Connect starts a new run in the project folder. A chat already open in the editor stays separate. Start a new chat in the project after Connect to use the room from that editor.";
 }
 
 ["agent", "a-agent", "s-agent"].forEach((id) => {
@@ -360,11 +374,53 @@ function showRoom(data) {
   people.replaceChildren();
   talk.replaceChildren();
   orders.replaceChildren();
+  const files = document.getElementById("files");
+  files.replaceChildren();
+  const sourceBox = document.getElementById("source-box");
+  const host = snapshot && snapshot.you && snapshot.you === snapshot.conductor;
+  sourceBox.hidden = !host;
+  if (!snapshot) {
+    files.append(line("No file is held."));
+  } else {
+    const held = snapshot.locks || [];
+    if (!held.length) files.append(line("No file is held."));
+    held.forEach((lock) => files.append(line(lock.holder + " is editing " + lock.file)));
+    if (data.guardNote) files.append(line(data.guardNote));
+    document.getElementById("push-line").textContent = data.pushNote || "";
+    const lineHost = document.getElementById("handoff-line");
+    if (snapshot.handoff) {
+      lineHost.textContent = "Handing the source to " + snapshot.handoff + ". That computer copies the folder, then shares it. Team Code Link must stay open there.";
+    } else if ((snapshot.source || {}).path) {
+      lineHost.textContent = (snapshot.source.seat || "This computer") + " holds the folder at " + snapshot.source.path + ".";
+    } else {
+      lineHost.textContent = "The source folder is not published yet.";
+    }
+    if (host) {
+      const pick = document.getElementById("handoff-seat");
+      const seats = [];
+      (snapshot.agents || []).forEach((player) => {
+        if (player.seat && !seats.includes(player.seat)) seats.push(player.seat);
+      });
+      const current = (snapshot.source || {}).seat || "";
+      const choices = seats.filter((seat) => seat !== current);
+      const previous = pick.value;
+      pick.replaceChildren();
+      choices.forEach((seat) => {
+        const option = document.createElement("option");
+        option.value = seat;
+        option.textContent = seat;
+        pick.append(option);
+      });
+      if (choices.includes(previous)) pick.value = previous;
+    }
+  }
   const shareNote = document.getElementById("share-note");
   shareNote.textContent = data.shareError || "";
   const planning = snapshot && snapshot.you && snapshot.you === snapshot.conductor;
   document.getElementById("plan-box").hidden = !planning;
   document.getElementById("plan-go").hidden = !planning || !!(snapshot && snapshot.plan);
+  if (data.planError) document.getElementById("plan-error").textContent = data.planError;
+  else if (snapshot && snapshot.plan) document.getElementById("plan-error").textContent = "";
   document.getElementById("plan-help").textContent = snapshot && snapshot.plan
     ? "The plan is with the team. Talk here if you want to tell your agent something more."
     : "Describe the work here. Your agent answers in the room. When the plan is the one you want, click The plan is a go. Your agent sends it to the team, and every agent starts its part.";
@@ -401,22 +457,43 @@ function showRoom(data) {
   const messages = (snapshot.messages || []).slice(-12);
   if (!messages.length) talk.append(line("No one has spoken yet."));
   messages.forEach((message) => talk.append(line(message.agent + ": " + message.text)));
-  if (snapshot.you && snapshot.you === snapshot.conductor) {
-    (snapshot.tasks || []).filter((task) => task.status !== "done").forEach((task) => {
-      const card = document.createElement("div");
-      card.className = "card";
-      const title = document.createElement("h2");
-      title.textContent = task.title;
+  (snapshot.tasks || []).forEach((task) => {
+    const onIt = task.status === "active" && (task.members || []).includes(snapshot.you);
+    const host = snapshot.you === snapshot.conductor && task.status !== "done";
+    if (!onIt && !host) return;
+    const card = document.createElement("div");
+    card.className = "card";
+    const title = document.createElement("h2");
+    title.textContent = task.title;
+    card.append(title);
+    if (host) {
       const box = document.createElement("textarea");
       box.value = task.approach || task.brief || "";
       const send = document.createElement("button");
       send.type = "button";
       send.textContent = "Send";
       send.addEventListener("click", () => instruct(task.id, box.value, send));
-      card.append(title, box, send);
-      orders.append(card);
-    });
-  }
+      card.append(box, send);
+    }
+    if (onIt) {
+      const finish = document.createElement("button");
+      finish.type = "button";
+      finish.textContent = "Finish my share";
+      finish.addEventListener("click", () => roomAction("/finish", task.id));
+      card.append(finish);
+    }
+    if (host) {
+      const close = document.createElement("button");
+      close.type = "button";
+      close.textContent = "Close this part";
+      close.addEventListener("click", () => roomAction("/complete", task.id));
+      card.append(close);
+    }
+    const note = document.createElement("p");
+    note.textContent = "Finished means this share of the part is done. The files are not merged.";
+    card.append(note);
+    orders.append(card);
+  });
 }
 
 async function planMessage(path, body) {
@@ -429,9 +506,46 @@ async function planMessage(path, body) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) error.textContent = data.error || "Your agent did not get that.";
+  else if (data.planError) error.textContent = data.planError;
   else if (data.error) error.textContent = data.error;
   refresh().catch(() => {});
 }
+
+async function roomAction(path, task) {
+  const error = document.getElementById("plan-error");
+  error.textContent = "";
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ task })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) error.textContent = data.error || "The room refused that.";
+  else if (data.merged) document.getElementById("source-note").textContent = data.merged;
+  else if (data.github) document.getElementById("source-note").textContent = data.github;
+  refresh().catch(() => {});
+}
+
+document.getElementById("handoff").addEventListener("click", async () => {
+  const note = document.getElementById("source-note");
+  note.textContent = "";
+  const response = await fetch("/handoff", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ seat: document.getElementById("handoff-seat").value })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) note.textContent = data.error || "The room refused that.";
+  refresh().catch(() => {});
+});
+document.getElementById("push-github").addEventListener("click", async () => {
+  const note = document.getElementById("source-note");
+  note.textContent = "";
+  const response = await fetch("/push", { method: "POST" });
+  const data = await response.json().catch(() => ({}));
+  note.textContent = response.ok ? (data.text || "Pushed to GitHub.") : (data.error || "This folder is not a GitHub project.");
+  refresh().catch(() => {});
+});
 document.getElementById("plan-send").addEventListener("click", () => {
   const box = document.getElementById("plan-talk");
   planMessage("/talk", { text: box.value });

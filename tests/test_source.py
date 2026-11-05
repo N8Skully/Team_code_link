@@ -128,6 +128,12 @@ class SourceTests(unittest.TestCase):
         self.assertIn("--approve-mcps", command)
         self.assertEqual(command[command.index("--workspace") + 1], "C:\\work\\Shared")
         self.assertEqual(command[-1], "hello")
+        resumed = agent_listen.launch_argv("cursor", ["node", "index.js"], Path("C:/work/Shared"), "hello", resume=True)
+        self.assertIn("--resume", resumed)
+        continued = agent_listen.launch_argv("claude", ["claude"], Path("C:/work/Shared"), "hello", resume=True)
+        self.assertIn("--continue", continued)
+        again = agent_listen.launch_argv("chatgpt", ["node", "codex.js"], Path("C:/work/Shared"), "hello", resume=True)
+        self.assertIn("resume", again)
 
     def test_each_named_agent_has_its_own_start_command(self) -> None:
         import agent_listen
@@ -141,6 +147,38 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(hermes[:4], ["hermes", "chat", "--oneshot", "-q"])
         names = [item["id"] for item in agent_listen.known_agents()]
         self.assertEqual(names, ["cursor", "claude", "chatgpt", "hermes"])
+
+    def test_a_missing_plan_is_reported_after_the_agent_stops(self) -> None:
+        import agent_listen
+
+        self.assertEqual(agent_listen.plan_result(True, True, False), (True, ""))
+        waiting, notice = agent_listen.plan_result(True, False, False)
+        self.assertFalse(waiting)
+        self.assertIn("without publishing", notice)
+        self.assertEqual(agent_listen.plan_result(True, False, True), (False, ""))
+
+    def test_only_a_github_address_counts_as_a_github_project(self) -> None:
+        self.assertEqual(share.github_remote(Path("C:/missing/not-a-repo")), "")
+
+    def test_an_outside_edit_of_a_held_file_is_put_back(self) -> None:
+        import tempfile
+        import time
+
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw)
+            target = folder / "notes.txt"
+            target.write_text("kept", encoding="utf-8")
+            share.remember_held(folder, "notes.txt")
+            target.write_text("changed", encoding="utf-8")
+            notes = share.guard_held(folder, [{"file": "notes.txt", "holder": "nate/cursor"}])
+            self.assertEqual(target.read_text(encoding="utf-8"), "kept")
+            self.assertIn("put back", notes[0])
+            allow = share.allow_path(folder, "notes.txt")
+            allow.parent.mkdir(parents=True, exist_ok=True)
+            allow.write_text(str(time.time()), encoding="utf-8")
+            target.write_text("from cursor", encoding="utf-8")
+            share.guard_held(folder, [{"file": "notes.txt", "holder": "nate/cursor"}])
+            self.assertEqual(target.read_text(encoding="utf-8"), "from cursor")
 
 
 if __name__ == "__main__":
