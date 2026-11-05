@@ -102,8 +102,14 @@ class AttachHandler(BaseHTTPRequestHandler):
                 self._send(400, {"error": str(exc)})
             return
         if path == "/plan-go":
+            payload = self._read_body()
+            parts = payload.get("parts") if isinstance(payload.get("parts"), list) else []
             try:
-                self._send(200, agent_listen.plan_is_a_go())
+                self._send(200, agent_listen.plan_is_a_go(
+                    str(payload.get("title") or ""),
+                    str(payload.get("framework") or ""),
+                    [str(item) for item in parts],
+                ))
             except OrchestraError as exc:
                 self._send(400, {"error": str(exc)})
             return
@@ -131,6 +137,12 @@ class AttachHandler(BaseHTTPRequestHandler):
         if path == "/push":
             try:
                 self._send(200, send_github("Send the shared project to GitHub."))
+            except OrchestraError as exc:
+                self._send(400, {"error": str(exc)})
+            return
+        if path == "/retry-merge":
+            try:
+                self._send(200, retry_merge())
             except OrchestraError as exc:
                 self._send(400, {"error": str(exc)})
             return
@@ -349,7 +361,7 @@ def finish_share(task: str) -> dict:
             merged = share.push_main(_project_folder(), "Finish the part.")
         except OrchestraError as exc:
             if "not a GitHub project" not in str(exc):
-                raise
+                return _start_repair(exc)
     text = liveclient.post("/v1/finish", {"task": task})
     github = merged
     if not merged:
@@ -358,7 +370,7 @@ def finish_share(task: str) -> dict:
         except OrchestraError as exc:
             if "not a GitHub project" not in str(exc):
                 github = str(exc)
-    return {"text": text, "github": github, "merged": merged}
+    return {"text": text, "github": github, "merged": merged, "conflicts": []}
 
 
 def close_part(task: str) -> dict:
@@ -367,9 +379,29 @@ def close_part(task: str) -> dict:
         merged = share.push_main(_project_folder(), "Close the part.")
     except OrchestraError as exc:
         if "not a GitHub project" not in str(exc):
-            raise
+            return _start_repair(exc)
     text = liveclient.post("/v1/complete", {"task": task})
-    return {"text": text, "merged": merged}
+    return {"text": text, "merged": merged, "conflicts": []}
+
+
+def _start_repair(exc: OrchestraError) -> dict:
+    files = share.conflicted_files(_project_folder())
+    if files:
+        agent_listen.repair_conflicts(files)
+    return {
+        "ok": False,
+        "error": "The same lines changed on both sides. The part stays unfinished.",
+        "conflicts": files,
+    }
+
+
+def retry_merge() -> dict:
+    folder = _project_folder()
+    files = share.still_conflicted(folder)
+    if files:
+        raise OrchestraError("These files still disagree: " + ", ".join(files))
+    note = share.push_main(folder, "Agree the lines and return the part to main.")
+    return {"ok": True, "merged": note, "conflicts": []}
 
 
 def send_github(message: str) -> dict:
@@ -429,6 +461,7 @@ def _desk(status: dict, snapshot, events: list, error: str) -> dict:
         "planError": agent_listen.review_plan(snapshot),
         "pushNote": source_loop.push_note(),
         "guardNote": source_loop.guard_note(),
+        "conflicts": share.listed_conflicts(),
         "error": error,
     }
 

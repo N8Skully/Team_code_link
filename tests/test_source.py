@@ -157,6 +157,20 @@ class SourceTests(unittest.TestCase):
         self.assertIn("without publishing", notice)
         self.assertEqual(agent_listen.plan_result(True, False, True), (False, ""))
 
+    def test_unanswered_room_text_is_what_restarts_the_agent(self) -> None:
+        import agent_listen
+
+        events = [
+            {"seq": 1, "agent": "office/cursor", "text": "old"},
+            {"seq": 2, "agent": "nate/cursor", "text": "mine"},
+            {"seq": 3, "agent": "office/cursor", "text": "new note"},
+        ]
+        latest, text = agent_listen.unanswered(events, "nate/cursor", 1)
+        self.assertEqual(latest, 3)
+        self.assertEqual(text, "new note")
+        latest, empty = agent_listen.unanswered(events, "nate/cursor", 3)
+        self.assertEqual(empty, "")
+
     def test_only_a_github_address_counts_as_a_github_project(self) -> None:
         self.assertEqual(share.github_remote(Path("C:/missing/not-a-repo")), "")
 

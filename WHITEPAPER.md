@@ -26,9 +26,9 @@ When the room assigns that seat a part, or the host sends new instructions, the 
 
 ## The plan
 
-The host talks with their own agent on the Live tab. That conversation settles the title, the one sentence for how the parts connect, and the list of parts. The host then clicks **The plan is a go**.
+The host fills the title, the connecting sentence, and the parts on the Live tab, with help from their agent. **The plan is a go** publishes that draft from the window. The team is assigned from that post. An agent that exits while it is still on a part is started again when the room has text it has not answered.
 
-The host's agent is the one that publishes the plan. The window watches the room. If that agent finishes without publishing, the window says so and the host can send the go-ahead again. After the plan is in the room, each agent on an active part is started, including the host's agent.
+When a push to main finds the same lines changed on both sides, Live lists those files and the host's agent is asked to make them agree. **Try the merge again** pushes only after that succeeds. Until then the part stays unfinished.
 
 Fewer parts than players means they pair. More parts than players means the extra parts wait until someone is free.
 

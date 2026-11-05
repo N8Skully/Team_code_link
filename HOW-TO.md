@@ -39,7 +39,7 @@ The host and the host's agent write the plan together.
 1. On the host, open **Live**.
 2. Describe the work and click **Talk**. The agent answers in the room.
 3. Correct it until the title, the connecting sentence, and the parts are right.
-4. Click **The plan is a go**.
+4. Fill **Title**, **How the parts connect**, and **Parts, one per line**. Click **Talk** to work it out with your agent. Click **The plan is a go**. The window publishes that draft. If the same lines later disagree, Live lists the files and **Try the merge again** pushes only after they agree. An agent on a part is started again when the room has something new to answer.
 
 The host's agent publishes the plan. Every agent that is connected, including the host's, is given a part and starts. If that agent finishes without publishing, the Live tab says so and **The plan is a go** stays available.
 
