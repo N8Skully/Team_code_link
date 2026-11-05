@@ -184,20 +184,12 @@ def install_mcp(folder: Path, key: str, agent: str = "cursor", home: Path | None
         _write_mcp_json(folder / ".mcp.json", script, key, folder)
 
 
-def cursor_launch(base: list[str], folder: Path, prompt: str) -> list[str]:
+def cursor_launch(base: list[str], folder: Path, prompt: str, resume: bool = False) -> list[str]:
     """Arguments that start the Cursor agent against one project folder."""
-    return [
-        *base,
-        "-p",
-        "--approve-mcps",
-        "--trust",
-        "--force",
-        "--sandbox",
-        "disabled",
-        "--workspace",
-        str(folder),
-        prompt,
-    ]
+    flags = ["-p", "--approve-mcps", "--trust", "--force", "--sandbox", "disabled", "--workspace", str(folder)]
+    if resume:
+        flags = ["--resume", *flags]
+    return [*base, *flags, prompt]
 
 
 def _cursor_base() -> list[str] | None:
@@ -289,20 +281,27 @@ def known_agents() -> list[dict]:
     ]
 
 
-def launch_argv(agent: str, base: list[str], folder: Path, prompt: str) -> list[str]:
-    """Arguments that start one named agent in the project folder."""
+def launch_argv(agent: str, base: list[str], folder: Path, prompt: str, resume: bool = False) -> list[str]:
+    """Arguments that start one named agent in the project folder.
+
+    resume continues the last session of that program. A missing session is started fresh by the caller.
+    """
     if agent == "cursor":
-        return cursor_launch(base, folder, prompt)
+        return cursor_launch(base, folder, prompt, resume=resume)
     if agent == "claude":
-        return [*base, "-p", "--permission-mode", "bypassPermissions", prompt]
+        flags = ["--continue"] if resume else []
+        return [*base, *flags, "-p", "--permission-mode", "bypassPermissions", prompt]
     if agent == "chatgpt":
+        if resume:
+            return [*base, "resume", prompt]
         return [*base, "exec", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", prompt]
     if agent == "hermes":
-        return [*base, "chat", "--oneshot", "-q", prompt]
+        flags = ["--resume"] if resume else []
+        return [*base, "chat", *flags, "--oneshot", "-q", prompt]
     return [*base, prompt]
 
 
-def connect_agent(key: str, folder: Path, prompt: str | None = None, force: bool = False) -> dict:
+def connect_agent(key: str, folder: Path, prompt: str | None = None, force: bool = False, resume: bool = False) -> dict:
     """Start the named agent in the project, using the same room link as this app."""
     global _process, _key, _error, _log_handle
     if _process is not None and _process.poll() is None:
@@ -333,7 +332,7 @@ def connect_agent(key: str, folder: Path, prompt: str | None = None, force: bool
         "Then call listen and answer when the conductor or a teammate speaks. "
         "Work only in this folder."
     )
-    command = launch_argv(agent_name, base, folder, text)
+    command = launch_argv(agent_name, base, folder, text, resume=resume)
     log_path = share.app_dir() / "agent-session.log"
     _log_handle = log_path.open("a", encoding="utf-8")
     _process = subprocess.Popen(
@@ -346,6 +345,19 @@ def connect_agent(key: str, folder: Path, prompt: str | None = None, force: bool
         env={**os.environ, "TEAM_LINK_AGENT": key, "TEAM_LINK_ROOT": str(folder)},
     )
     time.sleep(1.5)
+    if resume and _process.poll() is not None:
+        command = launch_argv(agent_name, base, folder, text, resume=False)
+        _log_handle = log_path.open("a", encoding="utf-8")
+        _process = subprocess.Popen(
+            command,
+            cwd=str(folder),
+            stdin=subprocess.DEVNULL,
+            stdout=_log_handle,
+            stderr=subprocess.STDOUT,
+            creationflags=_hidden(),
+            env={**os.environ, "TEAM_LINK_AGENT": key, "TEAM_LINK_ROOT": str(folder)},
+        )
+        time.sleep(1.5)
     if _process.poll() is not None:
         _error = _recent_log(log_path) or f"The {agent_name} program stopped before it joined the room."
     else:
@@ -393,11 +405,42 @@ def talk_plan(text: str) -> dict:
     )
 
 
+_awaiting_plan = False
+_plan_notice = ""
+
+
+def plan_result(awaiting: bool, running: bool, has_plan: bool) -> tuple[bool, str]:
+    """What the Live tab should say after The plan is a go.
+
+    The host's agent is still the one that publishes. This only reports whether that happened.
+    """
+    if has_plan or not awaiting:
+        return False, ""
+    if running:
+        return True, ""
+    return False, "Your agent finished without publishing the plan. Click The plan is a go again."
+
+
+def review_plan(snap: dict | None) -> str:
+    """Update the plan notice from the live room. Empty means nothing to show."""
+    global _awaiting_plan, _plan_notice
+    has_plan = bool((snap or {}).get("plan"))
+    running = _process is not None and _process.poll() is None
+    _awaiting_plan, notice = plan_result(_awaiting_plan, running, has_plan)
+    if notice:
+        _plan_notice = notice
+    elif has_plan or not _awaiting_plan:
+        if has_plan:
+            _plan_notice = ""
+    return _plan_notice
+
+
 def plan_is_a_go() -> dict:
     """The host approved the plan. This agent publishes it and the team starts."""
+    global _awaiting_plan, _plan_notice
     you, folder = _seat()
     liveclient._request(None, "POST", "/v1/say", {"text": "The plan is a go."})
-    return connect_agent(
+    result = connect_agent(
         you,
         folder,
         (
@@ -410,9 +453,20 @@ def plan_is_a_go() -> dict:
         ),
         force=True,
     )
+    if result.get("error"):
+        _awaiting_plan = False
+        _plan_notice = str(result["error"])
+    else:
+        _awaiting_plan = True
+        _plan_notice = ""
+    result["planError"] = _plan_notice
+    return result
 
 
-def start_turn(you: str, task: dict, folder: Path) -> None:
+def start_turn(you: str, task: dict, folder: Path) -> bool:
+    """Start this seat on a part. False means a turn is already running, so try again later."""
+    if _process is not None and _process.poll() is None:
+        return False
     title = task.get("title") or "your part"
     text = task.get("approach") or task.get("brief") or ""
     liveclient._request(
@@ -422,9 +476,7 @@ def start_turn(you: str, task: dict, folder: Path) -> None:
         {"task": task.get("id"), "text": f"Starting {title}. {text}"},
     )
     if not folder.is_dir():
-        return
-    if _process is not None and _process.poll() is None:
-        return
+        return True
     connect_agent(
         you,
         folder,
@@ -435,6 +487,7 @@ def start_turn(you: str, task: dict, folder: Path) -> None:
             "Work in this folder. When you change a file, say so in the Team Code Link room."
         ),
     )
+    return True
 
 
 def loop() -> None:
@@ -446,28 +499,33 @@ def loop() -> None:
             time.sleep(3)
             continue
         snap = room.get("snapshot") or {}
+        review_plan(snap)
         you = snap.get("you")
         if not you:
             time.sleep(3)
             continue
         folder = share.working_folder(str(snap.get("project") or ""))
+        busy = _process is not None and _process.poll() is None
         for task in snap.get("tasks") or []:
             if task.get("status") != "active" or you not in (task.get("members") or []):
                 continue
-            text = task.get("approach") or ""
+            text = task.get("approach") or task.get("brief") or ""
             mark = f"{task.get('id')}:{text}"
             if not text or mark in heard:
+                continue
+            if busy:
                 continue
             mine = False
             for event in reversed(room.get("events") or []):
                 if event.get("type") == "approach" and event.get("task") == task.get("id"):
                     mine = event.get("agent") == you
                     break
-            heard.add(mark)
             if mine:
+                heard.add(mark)
                 continue
             try:
-                start_turn(you, task, folder)
+                if start_turn(you, task, folder):
+                    heard.add(mark)
             except OrchestraError:
                 pass
         time.sleep(3)

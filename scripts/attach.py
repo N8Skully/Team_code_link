@@ -107,6 +107,33 @@ class AttachHandler(BaseHTTPRequestHandler):
             except OrchestraError as exc:
                 self._send(400, {"error": str(exc)})
             return
+        if path == "/finish":
+            payload = self._read_body()
+            try:
+                self._send(200, finish_share(str(payload.get("task") or "")))
+            except OrchestraError as exc:
+                self._send(400, {"error": str(exc)})
+            return
+        if path == "/complete":
+            payload = self._read_body()
+            try:
+                self._send(200, close_part(str(payload.get("task") or "")))
+            except OrchestraError as exc:
+                self._send(400, {"error": str(exc)})
+            return
+        if path == "/handoff":
+            payload = self._read_body()
+            try:
+                self._send(200, hand_source(str(payload.get("seat") or "")))
+            except OrchestraError as exc:
+                self._send(400, {"error": str(exc)})
+            return
+        if path == "/push":
+            try:
+                self._send(200, send_github("Send the shared project to GitHub."))
+            except OrchestraError as exc:
+                self._send(400, {"error": str(exc)})
+            return
         if path == "/lock":
             self._proxy_lock("/v1/lock")
             return
@@ -164,6 +191,13 @@ class AttachHandler(BaseHTTPRequestHandler):
             return
         try:
             text = liveclient.post(route, {"path": str(payload.get("path") or "")})
+            if route == "/v1/lock":
+                try:
+                    from orchestra import file_key
+
+                    share.remember_held(_project_folder(), file_key(str(payload.get("path") or "")))
+                except OrchestraError:
+                    pass
         except OrchestraError as exc:
             self._send(400, {"error": str(exc)})
             return
@@ -242,7 +276,7 @@ def start_here(payload: dict, hosting: bool) -> dict:
                 raise
         liveclient._request(root, "POST", "/v1/project", {"name": project})
         liveclient._request(root, "POST", "/v1/source", {"seat": seat})
-    launched = agent_listen.connect_agent(f"{seat}/{agent}", chosen_folder)
+    launched = agent_listen.connect_agent(f"{seat}/{agent}", chosen_folder, resume=True)
     source = ""
     share_error = ""
     if hosting:
@@ -277,6 +311,71 @@ def send_instructions(task: str, text: str) -> dict:
     liveclient._request(None, "POST", "/v1/approach", {"task": task, "text": text})
     liveclient._request(None, "POST", "/v1/say", {"task": task, "text": text})
     return {"ok": True}
+
+
+def _project_folder() -> Path:
+    try:
+        room = liveclient._request(None, "GET", "/v1/room")
+        project = str((room.get("snapshot") or {}).get("project") or "")
+    except OrchestraError:
+        project = ""
+    if not project:
+        project = str(share.load_settings().get("project") or "Shared")
+    return share.working_folder(project)
+
+
+def hand_source(seat: str) -> dict:
+    chosen = seat.strip()
+    if not chosen:
+        raise OrchestraError("Choose the computer that should hold the folder.")
+    liveclient._request(None, "POST", "/v1/source", {"seat": chosen})
+    return {"ok": True}
+
+
+def _last_share(task: str) -> bool:
+    if not task:
+        return False
+    room = liveclient._request(None, "GET", "/v1/room")
+    for item in (room.get("snapshot") or {}).get("tasks") or []:
+        if item.get("id") == task:
+            return len(item.get("members") or []) <= 1
+    return False
+
+
+def finish_share(task: str) -> dict:
+    merged = ""
+    if _last_share(task):
+        try:
+            merged = share.push_main(_project_folder(), "Finish the part.")
+        except OrchestraError as exc:
+            if "not a GitHub project" not in str(exc):
+                raise
+    text = liveclient.post("/v1/finish", {"task": task})
+    github = merged
+    if not merged:
+        try:
+            github = share.push_folder(_project_folder(), "Finish a share of the project.")
+        except OrchestraError as exc:
+            if "not a GitHub project" not in str(exc):
+                github = str(exc)
+    return {"text": text, "github": github, "merged": merged}
+
+
+def close_part(task: str) -> dict:
+    merged = ""
+    try:
+        merged = share.push_main(_project_folder(), "Close the part.")
+    except OrchestraError as exc:
+        if "not a GitHub project" not in str(exc):
+            raise
+    text = liveclient.post("/v1/complete", {"task": task})
+    return {"text": text, "merged": merged}
+
+
+def send_github(message: str) -> dict:
+    folder = _project_folder()
+    text = share.push_folder(folder, message or "Save the shared project.")
+    return {"ok": True, "text": text}
 
 
 def _room_code(raw: str) -> str:
@@ -327,6 +426,9 @@ def _desk(status: dict, snapshot, events: list, error: str) -> dict:
         "agent": agent_listen.status(),
         "agents": agent_listen.known_agents(),
         "shareError": source_loop.share_error,
+        "planError": agent_listen.review_plan(snapshot),
+        "pushNote": source_loop.push_note(),
+        "guardNote": source_loop.guard_note(),
         "error": error,
     }
 

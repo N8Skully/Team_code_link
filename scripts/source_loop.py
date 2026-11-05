@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 import liveclient
@@ -57,6 +58,7 @@ def publish_now(project: str, root: Path | None = None) -> str:
     folder = share.working_folder(project)
     host = share.tailscale_hostname()
     try:
+        share.allow_room_port()
         share.ensure_share(project, folder)
     except OrchestraError as exc:
         text = str(exc)
@@ -71,6 +73,63 @@ def publish_now(project: str, root: Path | None = None) -> str:
     return path
 
 
+_stamp = 0.0
+_quiet_at = 0.0
+_push_note = ""
+_guard_note = ""
+
+
+def push_note() -> str:
+    return _push_note
+
+
+def guard_note() -> str:
+    return _guard_note
+
+
+def _tree_stamp(folder: Path) -> float:
+    latest = 0.0
+    if not folder.is_dir():
+        return 0.0
+    for path in folder.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(folder).as_posix()
+        if rel.startswith(".git/") or "/allows/" in rel:
+            continue
+        try:
+            latest = max(latest, path.stat().st_mtime)
+        except OSError:
+            continue
+    return latest
+
+
+def watch_source(folder: Path, locks: list) -> None:
+    """On the source computer, restore outside edits and push after the folder is quiet."""
+    global _stamp, _quiet_at, _push_note, _guard_note
+    notes = share.guard_held(folder, locks)
+    _guard_note = " ".join(notes)
+    if not share.github_remote(folder):
+        return
+    stamp = _tree_stamp(folder)
+    now = time.time()
+    if stamp != _stamp:
+        _stamp = stamp
+        _quiet_at = now
+        return
+    if not _quiet_at or now - _quiet_at < 8:
+        return
+    status = share._run([share._git(), "-C", str(folder), "status", "--porcelain"], check=False)
+    if not (status.stdout or "").strip():
+        _quiet_at = 0.0
+        return
+    try:
+        _push_note = share.push_folder(folder, "Save the shared project.")
+    except OrchestraError as exc:
+        _push_note = str(exc)
+    _quiet_at = 0.0
+
+
 def tick(root: Path | None = None, home: Path | None = None) -> str:
     seat = my_seat(root)
     if not seat:
@@ -82,6 +141,8 @@ def tick(root: Path | None = None, home: Path | None = None) -> str:
     snap = room.get("snapshot") or {}
     project = str(snap.get("project") or "")
     source = snap.get("source") or {}
+    if project and source.get("seat") == seat:
+        watch_source(share.working_folder(project), snap.get("locks") or [])
     handoff = str(snap.get("handoff") or "")
     action = share.next_action(seat, project, source, handoff, holding_name(root))
     if action == "wait":

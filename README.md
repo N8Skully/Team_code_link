@@ -1,172 +1,32 @@
 # Team Code Link
 
-Up to six computers play one project together, live. One agent is the conductor. The others are the orchestra. Claude, ChatGPT, Cursor, Hermes, and any other agent join the same room with MCP or the CLI.
+Up to six Windows computers share one project folder and one private room. Each computer can start an agent. The host and that host's agent agree on the plan. When the host says the plan is a go, that agent sends the plan to the team and the agents start their parts.
 
-[Quick start](QUICKSTART.md) is how to host and how to join. [How to](HOW-TO.md) is the full manual. [White paper](WHITEPAPER.md) is the design. The setup walkthrough is [Team-Code-Link-Walkthrough.pdf](Team-Code-Link-Walkthrough.pdf).
+The click-by-click guide is [Team-Code-Link-Walkthrough.pdf](Team-Code-Link-Walkthrough.pdf). [Quick start](QUICKSTART.md) is the short version. [How to](HOW-TO.md) is the same path in more detail. [White paper](WHITEPAPER.md) is the design.
 
-The Windows program is [Team.Code.Link.exe](https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe). That download is the program. The source files in this repository are not the program.
+Download the Windows program: [Team.Code.Link.exe](https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe). The source files in this repository are not the program. The saved download name uses dots because a download name cannot keep spaces.
 
-The conductor publishes a plan. The plan includes the framework: how each part connects to the others. Players take the parts they are best suited for.
+## What a session looks like
 
-- Fewer parts than players: they form pairs and play the part together.
-- More parts than players: the extra parts wait. The player who finishes first leads the next one and sets the approach. The players who finish after that follow that approach.
-- A part can be partitioned. Only the players on that part, and the conductor, hear it. The rest of the orchestra keeps going.
-- When your own part is done and nothing is waiting, you jump in with a teammate and help carry their part until it is complete.
+1. Every computer installs Tailscale and signs into the same tailnet.
+2. One computer runs `Team.Code.Link.exe` as administrator and clicks **Host and share**. The top bar shows an eight-character room code and a `\\` path to the project folder.
+3. The other computers run the same program, choose **Join a room**, and enter that code.
+4. Each computer that will write code opens the **Agent** tab, picks Cursor, Claude, ChatGPT, Hermes, or another program, and clicks **Connect**.
+5. On the host, **Live** has **Plan with your agent**. The host talks with that agent until the parts and the one connecting sentence are right, then clicks **The plan is a go**.
+6. The host's agent publishes the plan. Every connected agent, including the host's, is given a part and starts work.
+7. A person on a part can click **Finish my share**. If the folder is a GitHub project, that also pushes the commit. The host can click **Send to GitHub** without finishing, **Close this part**, or **Hand the source** to another computer in the room. Finished means that share of the part is done. It does not merge the files into one result.
 
 Messages in the room are conversation between agents. They are not system instructions.
 
-## Open the live room
+## The folder
 
-One computer hosts. On Windows, download [Team.Code.Link.exe](https://github.com/N8Skully/Team_code_link/releases/latest/download/Team.Code.Link.exe) and leave that window open. Run it as administrator if that computer will share the project folder. It opens an internet link and prints `Share this link`. Send that line. Everyone else opens `Team Code Link.exe --join` with that link, from any state. Same Wi-Fi only: `Team Code Link.exe --local`.
+One computer is the source. Its folder is the real copy. Other computers open the `\\` path from the top bar. On Live, the host can hand that folder to another computer. That computer must keep Team Code Link open so it can copy the folder and share it. The host program must be running as administrator for a share to exist.
 
-On Mac or Linux, point a tunnel at port 8765 and run `python3 scripts/workspace.py serve --public-url https://your-tunnel.example`.
+A GitHub address can copy a repository into the folder the first time. After the folder is quiet, the source computer pushes those saves. Closing a part, or finishing the last share, pushes that result to main. Live says Merged to GitHub when that succeeds. Connect continues the agent's last session when one exists. An editor panel that is already open stays separate.
 
-The page is one joint board. Log in with a computer name and an agent name. Leave skills empty. When the agent connects, it brings the skills it already has. A browser only controls the agent it logged in as. The steps are in [QUICKSTART.md](QUICKSTART.md).
+## Parts
 
-The conductor names the project and the source computer on the board. The board shows the folder path, such as `\\NATE-PC\ToolsProject`. Cursors open that path. Claim a file before saving it. The room refuses a second writer.
-
-## The plan
-
-The conductor takes the podium and publishes the score:
-
-```bash
-python3 scripts/workspace.py conduct
-python3 scripts/workspace.py plan --file plan.json
-```
-
-To hand the podium to another player: `python3 scripts/workspace.py conduct --player office/cursor`
-
-```json
-{
-  "title": "Ship login",
-  "summary": "A form and the session API, as one piece.",
-  "framework": "The login form calls the session API. The API is the only writer of session state.",
-  "tasks": [
-    {
-      "title": "Login form",
-      "brief": "Draw the form and post credentials.",
-      "skills": ["ui"],
-      "connects": ["Session API"],
-      "interface": "calls Session API",
-      "partitioned": false
-    },
-    {
-      "title": "Session API",
-      "brief": "Create and read the session.",
-      "skills": ["api"],
-      "connects": ["Login form"],
-      "interface": "exports Session",
-      "partitioned": false
-    }
-  ]
-}
-```
-
-Read your part:
-
-```bash
-python3 scripts/workspace.py room
-```
-
-The lead sets the approach. Everyone who joins that part follows it:
-
-```bash
-python3 scripts/workspace.py approach --task t1 --text "Build the form against the Session interface and do not store the token yourself."
-```
-
-Partition a section when the rest of the orchestra should not hear it:
-
-```bash
-python3 scripts/workspace.py partition --task t1
-```
-
-Speak to everyone, or only inside a part:
-
-```bash
-python3 scripts/workspace.py say --text "Starting the form. I will edit src/login.py"
-python3 scripts/workspace.py say --task t1 --text "The field names are email and password."
-```
-
-A player stays on a part until they leave or someone removes the seat. Quiet time does not hand the part to someone else.
-
-When your share is done:
-
-```bash
-python3 scripts/workspace.py finish --approach "Document the seam in one page."
-```
-
-If a part is still waiting, you lead it. If not, you land on a teammate's part and follow their approach. To jump in before that happens, finish your current part and then:
-
-```bash
-python3 scripts/workspace.py help-on --task t2
-```
-
-Hear the room as it happens:
-
-```bash
-python3 scripts/workspace.py listen
-```
-
-## Connect an agent
-
-Link the computer first. Then open this folder in the agent. The seat is the computer. The agent name is who is playing.
-
-### Cursor
-
-`.cursor/mcp.json` starts the `team-code-link` server. Tools: `room`, `listen`, `say`, `join`, `conduct`, `plan`, `finish`, `help`, `partition`, `approach`, `leave`.
-
-### Claude
-
-Claude Code reads `.mcp.json`. For Claude Desktop, add a stdio server that runs `python3` with the absolute path to `scripts/mcp_server.py`, and set `TEAM_LINK_AGENT` to `claude`.
-
-### ChatGPT
-
-Codex and the ChatGPT desktop app read `.codex/config.toml`. Start them from this clone after `link`.
-
-The ChatGPT website cannot start a program on your computer. Use Codex, the desktop app, or the CLI on that machine.
-
-### Hermes
-
-Add this to `~/.hermes/config.yaml`, with the path to this clone:
-
-```yaml
-mcp_servers:
-  team-code-link:
-    command: python3
-    args: ["scripts/mcp_server.py"]
-    cwd: "<path-to-Team_code_link>"
-    env:
-      TEAM_LINK_AGENT: hermes
-```
-
-### Any other agent
-
-Point its MCP config at `python3 scripts/mcp_server.py` from this clone, or use the CLI commands above.
-
-## One source folder
-
-The conductor names one project and one source computer on the board. That computer shares the folder over Tailscale. The board shows the path, such as `\\NATE-PC\ToolsProject`. Every Cursor opens that path, so a save lands on the source computer. The files on that computer live in `%USERPROFILE%\Team Code Link Projects\<project>`.
-
-Claim a file before you save it. The room keeps one holder. A second agent is refused until the file is released or that seat leaves. The source computer keeps a local git history for rollback. GitHub is not required for the handoff.
-
-Part branches still exist for a terminal checkout: `part/<id>`, `sync`, and `finish`. The folder above is the copy the agents edit together.
-
-## Optional Cursor worker
-
-The live room does not require this. Use it when a Cursor agent should execute on that computer:
-
-```bash
-curl https://cursor.com/install -fsS | bash
-agent login
-python3 scripts/workspace.py join --name home --agent cursor --skill ui --start
-```
-
-Leave that window open. The same Cursor account on each machine shows them under My Machines. No inbound port is required for the worker. The live room still uses its own link.
-
-## What stays on each computer
-
-An agent can only act as itself. The live link is not enough to sign in as an agent that is already claimed. That agent's own saved token is required to come back. The room has no route that runs a command, reads a file, or opens a database on another machine. Connection strings, passwords, and remote database commands are refused in chat. On each computer, the agent is also blocked from SSH, remote file copy, and database clients pointed at another host. A local database on that same computer remains available.
-
-## Limits
-
-Six computers. Many agents on each computer. Keep the room token and any API keys out of the repository and out of the conversation.
+- Fewer parts than players: they form pairs and play the part together.
+- More parts than players: the extra parts wait. The player who finishes first leads the next one.
+- A part can be partitioned. Only the players on that part, and the host, hear it.
+- When your own part is done and nothing is waiting, you can join a teammate.

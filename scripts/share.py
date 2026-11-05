@@ -3,11 +3,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 from orchestra import OrchestraError
@@ -272,12 +274,120 @@ def share_unc(hostname: str, name: str) -> str:
     return f"\\\\{hostname}\\{name}"
 
 
+def github_remote(folder: Path) -> str:
+    """The origin URL when this folder is a GitHub project. Otherwise ''."""
+    if not (folder / ".git").exists():
+        return ""
+    result = _run([_git(), "-C", str(folder), "remote", "get-url", "origin"], check=False)
+    url = (result.stdout or "").strip()
+    if result.returncode != 0 or "github.com" not in url.lower():
+        return ""
+    return url
+
+
+def push_folder(folder: Path, message: str) -> str:
+    """Commit the folder and push it when origin is GitHub."""
+    if not github_remote(folder):
+        raise OrchestraError("This folder is not a GitHub project.")
+    committed = commit_folder(folder, message)
+    branch = (_run([_git(), "-C", str(folder), "rev-parse", "--abbrev-ref", "HEAD"]).stdout or "").strip()
+    if not branch or branch == "HEAD":
+        branch = "main"
+        _run([_git(), "-C", str(folder), "checkout", "-B", branch])
+    _run([_git(), "-C", str(folder), "push", "-u", "origin", branch])
+    return committed + " Pushed to GitHub."
+
+
+def push_main(folder: Path, message: str) -> str:
+    """Commit the folder and push that commit onto main."""
+    if not github_remote(folder):
+        raise OrchestraError("This folder is not a GitHub project.")
+    commit_folder(folder, message)
+    result = _run(
+        [_git(), "-C", str(folder), "push", "origin", "HEAD:refs/heads/main"],
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").lower()
+        if "non-fast-forward" in detail or "rejected" in detail or "failed to push" in detail:
+            raise OrchestraError("The same lines changed on both sides. The part stays unfinished.")
+        raise OrchestraError((result.stderr or result.stdout or "The part could not be pushed to main.").strip())
+    return "Merged to GitHub."
+
+
+ALLOW_SECONDS = 20
+
+
+def _digest(relative: str) -> str:
+    return hashlib.sha256(relative.replace("\\", "/").encode("utf-8")).hexdigest()
+
+
+def allow_path(folder: Path, relative: str) -> Path:
+    return folder / ".cursor" / "team-link" / "allows" / _digest(relative)
+
+
+def _hold_path(folder: Path, relative: str) -> Path:
+    digest = hashlib.sha256(f"{folder.resolve()}|{relative}".encode("utf-8")).hexdigest()
+    return app_dir() / "holds" / digest
+
+
+def remember_held(folder: Path, relative: str) -> None:
+    """Keep the bytes of a file at the moment a seat claims it."""
+    src = folder / relative
+    dest = _hold_path(folder, relative)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if src.is_file():
+        dest.write_bytes(src.read_bytes())
+
+
+def allowed_recently(folder: Path, relative: str, now: float | None = None) -> bool:
+    path = allow_path(folder, relative)
+    if not path.is_file():
+        return False
+    try:
+        stamp = float(path.read_text(encoding="utf-8").strip())
+    except ValueError:
+        return False
+    moment = time.time() if now is None else now
+    return moment - stamp <= ALLOW_SECONDS
+
+
+def guard_held(folder: Path, locks: list) -> list[str]:
+    """Put back a claimed file that changed without a Cursor or Claude allow mark."""
+    notes: list[str] = []
+    for lock in locks or []:
+        if not isinstance(lock, dict):
+            continue
+        name = str(lock.get("file") or "").replace("\\", "/")
+        holder = str(lock.get("holder") or "Someone")
+        if not name:
+            continue
+        src = folder / name
+        held = _hold_path(folder, name)
+        if not src.is_file():
+            continue
+        if not held.is_file():
+            remember_held(folder, name)
+            continue
+        current = src.read_bytes()
+        saved = held.read_bytes()
+        if current == saved:
+            continue
+        if allowed_recently(folder, name):
+            held.write_bytes(current)
+            continue
+        src.write_bytes(saved)
+        notes.append(f"{holder} is editing {name}. The other save was put back.")
+    return notes
+
+
 def install_editor_hook(folder: Path) -> None:
-    """Cursor refuses a second agent save while another seat holds the file."""
+    """Cursor and Claude refuse a second agent save while another seat holds the file."""
     hooks = folder / ".cursor" / "hooks"
     hooks.mkdir(parents=True, exist_ok=True)
     (hooks / "file_lock.py").write_text(LOCK_HOOK, encoding="utf-8")
     (folder / ".cursor" / "hooks.json").write_text(LOCK_HOOKS, encoding="utf-8")
+    _install_claude_hook(folder)
 
 
 LOCK_HOOKS = """{
@@ -295,10 +405,53 @@ LOCK_HOOKS = """{
 }
 """
 
+CLAUDE_LOCK = {
+    "matcher": "Write|Edit",
+    "hooks": [{"type": "command", "command": "python3 .cursor/hooks/file_lock.py"}],
+}
+
+
+def _install_claude_hook(folder: Path) -> None:
+    """Claude Code reads PreToolUse from .claude/settings.json."""
+    path = folder / ".claude" / "settings.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data: dict = {}
+    if path.is_file():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                data = loaded
+        except json.JSONDecodeError:
+            data = {}
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        hooks = {}
+    current = hooks.get("PreToolUse")
+    if not isinstance(current, list):
+        current = []
+    command = CLAUDE_LOCK["hooks"][0]["command"]
+    already = any(
+        isinstance(item, dict)
+        and any(
+            isinstance(hook, dict) and hook.get("command") == command
+            for hook in (item.get("hooks") or [])
+        )
+        for item in current
+    )
+    if not already:
+        current.append(CLAUDE_LOCK)
+    hooks["PreToolUse"] = current
+    data["hooks"] = hooks
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
 LOCK_HOOK = r'''#!/usr/bin/env python3
 """Claim a project file before Cursor writes it. A second writer is refused."""
+import hashlib
 import json
+import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -312,12 +465,20 @@ def file_path(payload):
             return value.strip()
     return ""
 
+def relative_path(raw):
+    text = raw.replace(os.sep, "/")
+    cwd = os.getcwd().replace(os.sep, "/")
+    prefix = cwd.lower().rstrip("/") + "/"
+    if text.lower().startswith(prefix):
+        return text[len(prefix):]
+    return text
+
 raw = sys.stdin.read()
 try:
     payload = json.loads(raw or "{}")
 except json.JSONDecodeError:
     payload = {}
-path = file_path(payload)
+path = relative_path(file_path(payload))
 if not path:
     json.dump({"permission": "allow"}, sys.stdout)
     raise SystemExit(0)
@@ -350,9 +511,28 @@ except urllib.error.URLError:
         "agent_message": "Start Team Code Link.exe and log in, then edit the file again.",
     }, sys.stdout)
     raise SystemExit(0)
+digest = hashlib.sha256(path.encode("utf-8")).hexdigest()
+allow = os.path.join(".cursor", "team-link", "allows", digest)
+os.makedirs(os.path.dirname(allow), exist_ok=True)
+with open(allow, "w", encoding="utf-8") as handle:
+    handle.write(str(time.time()))
 json.dump({"permission": "allow"}, sys.stdout)
 '''
 
+
+
+def allow_room_port(port: int = 8765) -> None:
+    """Let other Tailscale computers reach the room. The public internet stays closed."""
+    if os.name != "nt":
+        raise OrchestraError("The room port is opened on Windows.")
+    script = """
+$adapter = Get-NetAdapter | Where-Object { $_.InterfaceDescription -like '*Tailscale*' -or $_.Name -like '*Tailscale*' } | Select-Object -First 1
+if (-not $adapter) { throw "Tailscale is not connected, so the room port was not opened." }
+$rule = "Team Code Link room"
+Get-NetFirewallRule -DisplayName $rule -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName $rule -Direction Inbound -Protocol TCP -LocalPort $env:TCL_ROOM_PORT -Action Allow -InterfaceAlias $adapter.Name | Out-Null
+"""
+    _powershell(script, {"TCL_ROOM_PORT": str(port)})
 
 
 def ensure_share(name: str, folder: Path) -> None:

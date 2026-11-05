@@ -167,11 +167,7 @@
   <p>A red line under the button is the reason it stopped. Read it. “Run Team Code Link as administrator” means close the window and do step 1 again. “No computer on Tailscale accepted that code” is a join error, not a host error. “The room did not start” means another Team Code Link window is already holding the room. Close the other one and click Host and share again.</p>
 </div>
 <h3>If other computers cannot find the room</h3>
-<p>The room listens on port 8765. A port is a numbered door on the computer. Tailscale can be connected and Windows can still block that door. The program opens the file-sharing door (port 445) on the Tailscale adapter when the share succeeds. It does not open port 8765 for you.</p>
-<p>On the host, open PowerShell with administrator rights: right-click PowerShell, then <strong>Run as administrator</strong>. Paste this and press Enter:</p>
-<pre>$adapter = (Get-NetAdapter | Where-Object { $_.InterfaceDescription -like '*Tailscale*' -or $_.Name -like '*Tailscale*' } | Select-Object -First 1).Name
-New-NetFirewallRule -DisplayName "Team Code Link room" -Direction Inbound -Protocol TCP -LocalPort 8765 -Action Allow -InterfaceAlias $adapter</pre>
-<p>In plain language: find the Tailscale network adapter, and allow incoming room traffic only on that adapter. The public internet is not opened. Then try the join again from the other computer.</p>
+<p>The room listens on port 8765. A port is a numbered door on the computer. Host and share opens that door on the Tailscale adapter only. The public internet is not opened. If Windows refuses, the red line says to run Team Code Link as administrator. Close the window, start it with Run as administrator, and click Host and share again.</p>
 
 <h2>7. On every other computer: join the room</h2>
 <p>Each person does this on their own PC. They need Tailscale connected to the same tailnet, and a copy of <code>Team Code Link.exe</code>. They do not need administrator rights to join. They do need the room code from the host.</p>
@@ -239,6 +235,9 @@ New-NetFirewallRule -DisplayName "Team Code Link room" -Direction Inbound -Proto
 <div class="see">
   <p>The other people do not type the plan. Their agents receive their parts from the room and start. The host is the one who talks with their agent and the one who clicks The plan is a go.</p>
 </div>
+<p>When your part is done, open <strong>Live</strong> and click <strong>Finish my share</strong>. That tells the room your share is finished. It does not merge the files into one result. If the folder is a GitHub project, that click also pushes the commit. The host can click <strong>Send to GitHub</strong> without finishing a part, and <strong>Close this part</strong> to close that part for everyone on it.</p>
+<p>The host can give the folder to another computer. On Live, choose that computer and click <strong>Hand the source</strong>. That computer must keep Team Code Link open. It copies the folder and then shares it. Live says who the folder is moving to.</p>
+<p>Live also lists each file someone is editing. A second Cursor or Claude save of that file is refused. If another editor changes a held file, that save is put back. After the folder is quiet, the source computer pushes it to GitHub when the folder has a remote. Closing a part, or finishing the last share, pushes that result to main. Live says Merged to GitHub when that succeeds, and leaves the part unfinished when the same lines disagree.</p>
 <div class="stop">
   <p>If the red line says to connect your agent first, open the Agent tab and click Connect, then come back to Live. The plan box is only on the host’s window.</p>
 </div>
@@ -319,7 +318,7 @@ git pull</pre>
   <tr><td>Tailscale not connected</td><td>Install Tailscale or click Sign in with Tailscale. Wait until the icon by the clock says Connected.</td></tr>
   <tr><td>Connected, but the other PC is not in the Tailscale list</td><td>They are on a different tailnet. Invite them from the admin users page and have them accept.</td></tr>
   <tr><td>Source stays none, red line about administrator</td><td>Close the program. Right-click the exe, Run as administrator, and click Host and share again.</td></tr>
-  <tr><td>No computer on Tailscale accepted that code</td><td>Host window is closed, the code was typed wrong, or port 8765 is blocked. Section 6.</td></tr>
+  <tr><td>No computer on Tailscale accepted that code</td><td>The host window is closed, the code was typed wrong, or Host and share was not run as administrator. Section 6.</td></tr>
   <tr><td>The seat is in the room. The agent program is not running.</td><td>The name was registered. Cursor’s agent did not stay running. Click Connect again after Cursor is installed and signed in.</td></tr>
   <tr><td>The cursor program is not installed</td><td>Install Cursor on that computer, open it once, then click Connect.</td></tr>
   <tr><td>The room did not start</td><td>Another Team Code Link window is already using the room. Close it and host again.</td></tr>
