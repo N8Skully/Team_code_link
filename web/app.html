@@ -154,6 +154,9 @@
     <div id="plan-box" hidden>
       <h2>Plan with your agent</h2>
       <p id="plan-help">Describe the work here. Your agent answers in the room. When the plan is the one you want, click The plan is a go. Your agent sends it to the team, and every agent starts its part.</p>
+      <label>Title<input id="plan-title" autocomplete="off"></label>
+      <label>How the parts connect<input id="plan-framework" autocomplete="off"></label>
+      <label>Parts, one per line<textarea id="plan-parts"></textarea></label>
       <textarea id="plan-talk" placeholder="What are we building, and how do the parts connect?"></textarea>
       <button id="plan-send" type="button">Talk</button>
       <button id="plan-go" type="button">The plan is a go</button>
@@ -169,6 +172,10 @@
       <button id="push-github" type="button">Send to GitHub</button>
       <p id="push-line"></p>
       <p id="source-note"></p>
+    </div>
+    <div id="repair-box" hidden>
+      <p id="conflict-line"></p>
+      <button id="retry-merge" type="button">Try the merge again</button>
     </div>
     <h2>Editing</h2>
     <div id="files"></div>
@@ -387,6 +394,12 @@ function showRoom(data) {
     held.forEach((lock) => files.append(line(lock.holder + " is editing " + lock.file)));
     if (data.guardNote) files.append(line(data.guardNote));
     document.getElementById("push-line").textContent = data.pushNote || "";
+    const conflicts = data.conflicts || [];
+    document.getElementById("repair-box").hidden = !conflicts.length;
+    document.getElementById("conflict-line").textContent = conflicts.length
+      ? "These files disagree: " + conflicts.join(", ") + ". The part stays unfinished until they agree."
+      : "";
+    fillDraft(snapshot);
     const lineHost = document.getElementById("handoff-line");
     if (snapshot.handoff) {
       lineHost.textContent = "Handing the source to " + snapshot.handoff + ". That computer copies the folder, then shares it. Team Code Link must stay open there.";
@@ -496,6 +509,35 @@ function showRoom(data) {
   });
 }
 
+let planDirty = false;
+["plan-title", "plan-framework", "plan-parts"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", () => { planDirty = true; });
+});
+
+function parsePlan(text) {
+  const title = (text.match(/^Title:\s*(.+)$/im) || [])[1];
+  const framework = (text.match(/^Framework:\s*(.+)$/im) || [])[1];
+  const partsBlock = text.split(/Parts:\s*/i)[1];
+  if (!title || !partsBlock) return null;
+  const parts = partsBlock.split("\n").map((line) => line.replace(/^[-*]\s*/, "").trim()).filter(Boolean);
+  if (!parts.length) return null;
+  return { title: title.trim(), framework: (framework || "").trim(), parts };
+}
+
+function fillDraft(snapshot) {
+  if (!snapshot || planDirty) return;
+  const reply = (snapshot.messages || []).slice().reverse().find((message) => message.agent && message.agent !== snapshot.you);
+  if (!reply) return;
+  const parsed = parsePlan(reply.text || "");
+  if (!parsed) return;
+  const title = document.getElementById("plan-title");
+  const framework = document.getElementById("plan-framework");
+  const parts = document.getElementById("plan-parts");
+  if (!title.value) title.value = parsed.title;
+  if (!framework.value) framework.value = parsed.framework;
+  if (!parts.value) parts.value = parsed.parts.join("\n");
+}
+
 async function planMessage(path, body) {
   const error = document.getElementById("plan-error");
   error.textContent = "";
@@ -520,7 +562,7 @@ async function roomAction(path, task) {
     body: JSON.stringify({ task })
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) error.textContent = data.error || "The room refused that.";
+  if (!response.ok || data.ok === false) error.textContent = data.error || "The room refused that.";
   else if (data.merged) document.getElementById("source-note").textContent = data.merged;
   else if (data.github) document.getElementById("source-note").textContent = data.github;
   refresh().catch(() => {});
@@ -550,7 +592,22 @@ document.getElementById("plan-send").addEventListener("click", () => {
   const box = document.getElementById("plan-talk");
   planMessage("/talk", { text: box.value });
 });
-document.getElementById("plan-go").addEventListener("click", () => planMessage("/plan-go", {}));
+document.getElementById("plan-go").addEventListener("click", () => {
+  const parts = document.getElementById("plan-parts").value.split("\n").map((line) => line.trim()).filter(Boolean);
+  planMessage("/plan-go", {
+    title: document.getElementById("plan-title").value.trim(),
+    framework: document.getElementById("plan-framework").value.trim(),
+    parts
+  });
+});
+document.getElementById("retry-merge").addEventListener("click", async () => {
+  const note = document.getElementById("source-note");
+  note.textContent = "";
+  const response = await fetch("/retry-merge", { method: "POST" });
+  const data = await response.json().catch(() => ({}));
+  note.textContent = response.ok ? (data.merged || "Merged to GitHub.") : (data.error || "The part stays unfinished.");
+  refresh().catch(() => {});
+});
 
 async function instruct(task, text, send) {
   send.disabled = true;

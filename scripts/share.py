@@ -312,7 +312,45 @@ def push_main(folder: Path, message: str) -> str:
         if "non-fast-forward" in detail or "rejected" in detail or "failed to push" in detail:
             raise OrchestraError("The same lines changed on both sides. The part stays unfinished.")
         raise OrchestraError((result.stderr or result.stdout or "The part could not be pushed to main.").strip())
+    clear_conflicts()
     return "Merged to GitHub."
+
+
+_open_conflicts: list[str] = []
+
+
+def listed_conflicts() -> list[str]:
+    return list(_open_conflicts)
+
+
+def conflicted_files(folder: Path) -> list[str]:
+    """Files that still disagree after a merge with origin/main. Empty when the merge is clean."""
+    if not (folder / ".git").exists():
+        return []
+    _run([_git(), "-C", str(folder), "fetch", "origin"], check=False)
+    merged = _run([_git(), "-C", str(folder), "merge", "--no-edit", "origin/main"], check=False)
+    if merged.returncode == 0:
+        return []
+    names = _run([_git(), "-C", str(folder), "diff", "--name-only", "--diff-filter=U"], check=False)
+    files = [line.strip() for line in (names.stdout or "").splitlines() if line.strip()]
+    if not files:
+        _run([_git(), "-C", str(folder), "merge", "--abort"], check=False)
+    else:
+        global _open_conflicts
+        _open_conflicts = files
+    return files
+
+
+def still_conflicted(folder: Path) -> list[str]:
+    if not (folder / ".git").exists():
+        return []
+    names = _run([_git(), "-C", str(folder), "diff", "--name-only", "--diff-filter=U"], check=False)
+    return [line.strip() for line in (names.stdout or "").splitlines() if line.strip()]
+
+
+def clear_conflicts() -> None:
+    global _open_conflicts
+    _open_conflicts = []
 
 
 ALLOW_SECONDS = 20

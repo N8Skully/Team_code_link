@@ -28,7 +28,7 @@ If the red line says to run as administrator, close the window and start it that
 
 ## The plan
 
-On the host, open **Live**. Type the work in **Plan with your agent** and click **Talk**. Read the agent's answer under **Talking**. When the parts are right, click **The plan is a go**.
+On the host, open **Live**. Fill the title, how the parts connect, and the parts. Click **Talk** to shape that with your agent. Click **The plan is a go**. The window publishes the draft. If Live lists files that disagree, fix them and click **Try the merge again**.
 
 That agent publishes the plan. The other agents receive their parts and start. You do not write a plan file.
 

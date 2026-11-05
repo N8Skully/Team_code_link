@@ -329,7 +329,8 @@ def connect_agent(key: str, folder: Path, prompt: str | None = None, force: bool
         f"You are {key} in Team Code Link. "
         "The team-code-link tools are configured for this folder. "
         "Call room, then say in the room that you are connected and ready. "
-        "Then call listen and answer when the conductor or a teammate speaks. "
+        "Call listen, answer anything new, then call listen again. "
+        "Do not leave while you are on a part. "
         "Work only in this folder."
     )
     command = launch_argv(agent_name, base, folder, text, resume=resume)
@@ -398,8 +399,9 @@ def talk_plan(text: str) -> dict:
         (
             f"The host is planning with you. They just said: {words} "
             "Reply in the Team Code Link room. "
-            "Work out the plan together: a title, one sentence for how the parts connect, and the list of parts. "
-            "Do not publish the plan until the host says the plan is a go."
+            "Work out the plan together. When you answer, use this shape so the window can show it: "
+            "Title: the name. Framework: the one sentence. Parts: then one part per line, each starting with a dash. "
+            "Do not publish the plan. The window publishes it when the host says the plan is a go."
         ),
         force=True,
     )
@@ -435,32 +437,55 @@ def review_plan(snap: dict | None) -> str:
     return _plan_notice
 
 
-def plan_is_a_go() -> dict:
-    """The host approved the plan. This agent publishes it and the team starts."""
+def plan_is_a_go(title: str, framework: str, parts: list[str]) -> dict:
+    """The window publishes the draft. The host's agent is told to start its part."""
     global _awaiting_plan, _plan_notice
+    name = title.strip()
+    sentence = framework.strip() or name
+    tasks = [{"title": item.strip(), "brief": item.strip()} for item in parts if str(item).strip()]
+    if not name or not tasks:
+        raise OrchestraError("Add a title and at least one part before the plan is a go.")
     you, folder = _seat()
+    liveclient._request(
+        None,
+        "POST",
+        "/v1/plan",
+        {"title": name, "framework": sentence, "tasks": tasks},
+    )
     liveclient._request(None, "POST", "/v1/say", {"text": "The plan is a go."})
+    _awaiting_plan = False
+    _plan_notice = ""
     result = connect_agent(
         you,
         folder,
         (
-            "The host says the plan is a go. Read the room for the plan you agreed. "
-            "Publish it with the plan tool. Include title, framework, and tasks. "
-            "Framework is the one sentence for how the parts connect. "
-            "Each task needs a title and a brief. "
-            "Then start the part you are given. "
-            "The other agents receive their parts from the room and start work."
+            "The window published the plan. "
+            f"The title is {name}. The parts connect like this: {sentence}. "
+            "Start the part you are given. "
+            "Call listen, answer anything new, then call listen again. "
+            "Do not leave while you are on a part."
         ),
         force=True,
     )
-    if result.get("error"):
-        _awaiting_plan = False
-        _plan_notice = str(result["error"])
-    else:
-        _awaiting_plan = True
-        _plan_notice = ""
-    result["planError"] = _plan_notice
+    result["planError"] = str(result.get("error") or "")
     return result
+
+
+def repair_conflicts(files: list[str]) -> dict:
+    """Start the host's agent on the files whose lines disagree."""
+    you, folder = _seat()
+    names = ", ".join(files)
+    return connect_agent(
+        you,
+        folder,
+        (
+            "The same lines changed on both sides. "
+            f"Make these files agree: {names}. "
+            "Then say in the Team Code Link room that they agree. "
+            "Do not leave the conflict markers in the files."
+        ),
+        force=True,
+    )
 
 
 def start_turn(you: str, task: dict, folder: Path) -> bool:
@@ -484,13 +509,36 @@ def start_turn(you: str, task: dict, folder: Path) -> bool:
             f"You are {you} in Team Code Link. "
             f"Your part is {title}. "
             f"Build it this way: {text} "
-            "Work in this folder. When you change a file, say so in the Team Code Link room."
+            "Work in this folder. Say what you change in the Team Code Link room. "
+            "Call listen, answer anything new, then call listen again. "
+            "Do not leave while you are on a part."
         ),
     )
     return True
 
 
+_heard_seq = 0
+
+
+def unanswered(events: list, you: str, after: int) -> tuple[int, str]:
+    """Room lines this seat has not answered, and the newest seq seen."""
+    latest = after
+    lines: list[str] = []
+    for event in events or []:
+        seq = int(event.get("seq") or 0)
+        if seq <= after:
+            continue
+        latest = max(latest, seq)
+        if event.get("agent") == you:
+            continue
+        text = str(event.get("text") or "").strip()
+        if text:
+            lines.append(text)
+    return latest, "\n".join(lines)
+
+
 def loop() -> None:
+    global _heard_seq
     heard: set[str] = set()
     while True:
         try:
@@ -526,6 +574,36 @@ def loop() -> None:
             try:
                 if start_turn(you, task, folder):
                     heard.add(mark)
+                    _heard_seq = int(snap.get("seq") or _heard_seq)
             except OrchestraError:
                 pass
+        if _process is None or _process.poll() is not None:
+            on_part = any(
+                task.get("status") == "active" and you in (task.get("members") or [])
+                for task in snap.get("tasks") or []
+            )
+            planning = you == snap.get("conductor") and not snap.get("plan")
+            if on_part or planning:
+                latest, pending = unanswered(room.get("events") or [], you, _heard_seq)
+                if pending:
+                    title = "your part"
+                    for task in snap.get("tasks") or []:
+                        if task.get("status") == "active" and you in (task.get("members") or []):
+                            title = task.get("title") or title
+                            break
+                    try:
+                        connect_agent(
+                            you,
+                            folder,
+                            (
+                                f"You are still {you} in Team Code Link. You are on {title}. "
+                                f"New room text:\n{pending}\n"
+                                "Answer in the room. Call listen, answer anything new, then call listen again. "
+                                "Do not leave while you are on a part."
+                            ),
+                            force=True,
+                        )
+                        _heard_seq = latest
+                    except OrchestraError:
+                        pass
         time.sleep(3)

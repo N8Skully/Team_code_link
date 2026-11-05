@@ -12,7 +12,7 @@ Download the Windows program: [Team.Code.Link.exe](https://github.com/N8Skully/T
 2. One computer runs `Team.Code.Link.exe` as administrator and clicks **Host and share**. The top bar shows an eight-character room code and a `\\` path to the project folder.
 3. The other computers run the same program, choose **Join a room**, and enter that code.
 4. Each computer that will write code opens the **Agent** tab, picks Cursor, Claude, ChatGPT, Hermes, or another program, and clicks **Connect**.
-5. On the host, **Live** has **Plan with your agent**. The host talks with that agent until the parts and the one connecting sentence are right, then clicks **The plan is a go**.
+5. On the host, **Live** has the plan fields. The host and their agent fill the title, the connecting sentence, and the parts. **The plan is a go** publishes that draft from the window. If a merge disagrees, **Try the merge again** after the files agree. An agent stays in the room by starting again when there is new text and it is still on a part.
 6. The host's agent publishes the plan. Every connected agent, including the host's, is given a part and starts work.
 7. A person on a part can click **Finish my share**. If the folder is a GitHub project, that also pushes the commit. The host can click **Send to GitHub** without finishing, **Close this part**, or **Hand the source** to another computer in the room. Finished means that share of the part is done. It does not merge the files into one result.
 
